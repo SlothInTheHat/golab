@@ -1,0 +1,5 @@
+# Everything, unless a later rule says otherwise.
+*             @acme/platform
+/api/         @acme/api-team
+/lib/         @acme/payments
+*.sql         @acme/data

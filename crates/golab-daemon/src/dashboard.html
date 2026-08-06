@@ -1,0 +1,1180 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>golab · collaborative workspace</title>
+<style>
+  :root {
+    color-scheme: light dark;
+    --bg: #0d1117; --panel: #151b23; --line: #232c38; --text: #e6edf3;
+    --muted: #8b949e; --accent: #58a6ff; --green: #3fb950; --yellow: #d29922;
+    --red: #f85149; --purple: #bc8cff;
+    --mono: ui-monospace, SFMono-Regular, "SF Mono", Menlo, monospace;
+  }
+  @media (prefers-color-scheme: light) {
+    :root {
+      --bg: #f6f8fa; --panel: #ffffff; --line: #d8dee4; --text: #1f2328;
+      --muted: #636c76; --accent: #0969da; --green: #1a7f37; --yellow: #9a6700;
+      --red: #cf222e; --purple: #8250df;
+    }
+  }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: var(--bg); color: var(--text);
+    font: 14px/1.5 ui-sans-serif, system-ui, -apple-system, "Segoe UI", sans-serif;
+  }
+  header {
+    display: flex; align-items: baseline; gap: 16px; flex-wrap: wrap;
+    padding: 16px 20px; border-bottom: 1px solid var(--line);
+  }
+  h1 { font-size: 16px; margin: 0; letter-spacing: -0.01em; }
+  h1 span { color: var(--muted); font-weight: 400; }
+  .stats { margin-left: auto; display: flex; gap: 18px; color: var(--muted); font-family: var(--mono); font-size: 12px; flex-wrap: wrap; }
+  .stats b { color: var(--text); font-weight: 600; }
+  #conn { font-family: var(--mono); font-size: 12px; }
+  #conn.up { color: var(--green); }
+  #conn.down { color: var(--red); }
+  main {
+    display: grid; grid-template-columns: repeat(auto-fit, minmax(320px, 1fr));
+    gap: 16px; padding: 16px 20px; align-items: start;
+  }
+  section {
+    background: var(--panel); border: 1px solid var(--line); border-radius: 8px;
+    overflow: hidden;
+  }
+  section > h2 {
+    font-size: 11px; text-transform: uppercase; letter-spacing: 0.08em;
+    color: var(--muted); margin: 0; padding: 10px 14px; border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; gap: 10px;
+  }
+  section > h2 .right { margin-left: auto; display: flex; gap: 6px; align-items: center; }
+  ul { list-style: none; margin: 0; padding: 0; max-height: 46vh; overflow-y: auto; }
+  li {
+    padding: 9px 14px; border-bottom: 1px solid var(--line); display: flex;
+    gap: 10px; align-items: baseline;
+    /* A row must never widen its panel. Anything that cannot fit is clipped
+       or ellipsised, because a horizontal scrollbar inside a dashboard tile
+       hides exactly the state you put it there to see. */
+    overflow: hidden;
+  }
+  li:last-child { border-bottom: none; }
+  .empty { color: var(--muted); padding: 14px; font-style: italic; }
+  .sym { font-family: var(--mono); font-size: 12.5px; word-break: break-all; min-width: 0; }
+  .who { color: var(--accent); font-weight: 600; flex: none; }
+  .meta {
+    color: var(--muted); font-size: 12px; margin-left: auto; white-space: nowrap;
+    font-family: var(--mono);
+    /* `min-width: 0` is what actually lets a flex item shrink below its
+       content width; without it the ellipsis never triggers. */
+    min-width: 0; overflow: hidden; text-overflow: ellipsis;
+  }
+  .dot { width: 8px; height: 8px; border-radius: 50%; flex: none; align-self: center; }
+  /* Three states: a tool is attached; something is heartbeating but no tool
+     session (a bare CLI loop); nothing seen recently. Hollow rather than a
+     third colour, so "is anyone actually here" stays readable at a glance. */
+  .dot.on { background: var(--green); }
+  .dot.idle { background: transparent; box-shadow: inset 0 0 0 1.5px var(--green); }
+  .dot.off { background: var(--muted); opacity: 0.5; }
+  .ttl.ok { color: var(--green); } .ttl.warn { color: var(--yellow); } .ttl.crit { color: var(--red); }
+  .badge {
+    font-family: var(--mono); font-size: 11px; padding: 1px 6px; border-radius: 4px;
+    border: 1px solid var(--line); color: var(--muted); flex: none;
+  }
+  .badge.running { color: var(--accent); border-color: var(--accent); }
+  .badge.done { color: var(--green); border-color: var(--green); }
+  .badge.blocked, .badge.failed { color: var(--red); border-color: var(--red); }
+  .badge.ready, .badge.open { color: var(--yellow); border-color: var(--yellow); }
+  .badge.accepted, .badge.get { color: var(--accent); border-color: var(--accent); }
+  .badge.post, .badge.put, .badge.patch { color: var(--yellow); border-color: var(--yellow); }
+  .badge.delete { color: var(--red); border-color: var(--red); }
+  .badge.fulfilled { color: var(--green); border-color: var(--green); }
+  .badge.declined, .badge.expired { color: var(--red); border-color: var(--red); }
+  .bar {
+    flex: none; width: 84px; height: 6px; border-radius: 3px;
+    background: var(--line); overflow: hidden; align-self: center;
+  }
+  .bar .fill { display: block; height: 100%; background: var(--green); }
+  #events { max-height: 46vh; font-family: var(--mono); font-size: 12px; }
+  #events li { gap: 8px; }
+  .ts { color: var(--muted); }
+  .kind { min-width: 130px; }
+  .kind.acquired, .kind.completed { color: var(--green); }
+  .kind.denied, .kind.preempted, .kind.failed { color: var(--red); }
+  .kind.expired, .kind.queued, .kind.dropped { color: var(--yellow); }
+  .kind.transferred, .kind.opened, .kind.accepted { color: var(--accent); }
+  .kind.started, .kind.ended { color: var(--accent); }
+  /* Work is available and nobody has taken it — the one stat on this strip
+     that asks a human to do something. */
+  .stats span.stalled { color: var(--yellow); }
+  .stats span.stalled b { color: var(--yellow); }
+  .wide { grid-column: 1 / -1; }
+
+  /* ---- live activity: the thing you cannot learn from a lease or a commit */
+  .act .verb { font-family: var(--mono); font-size: 11px; flex: none; }
+  /* A file path that wraps mid-word turns one row into three. Clip it. */
+  .act .sym { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; word-break: normal; }
+  .act .verb.editing { color: var(--yellow); }
+  .act .verb.edited { color: var(--green); }
+  .act .verb.blocked { color: var(--red); }
+  .pulse {
+    width: 7px; height: 7px; border-radius: 50%; background: var(--yellow);
+    flex: none; align-self: center; animation: pulse 1.6s ease-in-out infinite;
+  }
+  @keyframes pulse { 0%, 100% { opacity: 1; } 50% { opacity: 0.25; } }
+  @media (prefers-reduced-motion: reduce) {
+    .pulse { animation: none; }
+  }
+
+  /* ---- notifications */
+  .note { flex-direction: column; align-items: stretch; gap: 3px; }
+  .note .head { display: flex; gap: 8px; align-items: baseline; }
+  .note .why { color: var(--muted); font-size: 12px; }
+  .note.blocking { border-left: 2px solid var(--red); }
+  .note.warn { border-left: 2px solid var(--yellow); }
+  .note.info { border-left: 2px solid var(--line); }
+
+  /* ---- the repository graph */
+  #graphwrap { position: relative; height: 46vh; min-height: 320px; }
+  #graph { width: 100%; height: 100%; display: block; cursor: grab; touch-action: none; }
+  #graph.panning { cursor: grabbing; }
+  #graph text { font-family: ui-sans-serif, system-ui, sans-serif; user-select: none; }
+  .gn rect {
+    fill: var(--panel); stroke: var(--line); stroke-width: 1.2; rx: 6;
+    transition: stroke .15s, fill .15s;
+  }
+  .gn { cursor: pointer; }
+  .gn:hover rect { stroke: var(--muted); }
+  /* Somebody is inside this box. The single most important thing the picture
+     can say, so it gets the strongest treatment. */
+  .gn.busy rect { stroke: var(--green); stroke-width: 2; }
+  .gn.sel rect { stroke: var(--accent); stroke-width: 2.4; }
+  .gn.table rect { stroke-dasharray: 3 2; }
+  .gn .nm { fill: var(--text); font-size: 12px; font-weight: 600; }
+  .gn .sub { fill: var(--muted); font-size: 10px; font-family: var(--mono); }
+  .gn .who { fill: var(--green); font-size: 10px; font-family: var(--mono); }
+  /* `color` as well as `stroke`: the arrowhead marker paints with
+     currentColor, and without this it would inherit the page text colour and
+     stop matching the line it terminates. */
+  .ge { fill: none; stroke: var(--line); color: var(--line); stroke-width: 1.4; }
+  .ge.queries { stroke-dasharray: 4 3; }
+  /* A back-edge is drawn, not dropped: a cycle between two services is a real
+     fact about the architecture and hiding it to tidy the layout is a lie. */
+  .ge.back { stroke: var(--red); color: var(--red); stroke-dasharray: 2 3; }
+  .ge.contains { stroke-dasharray: 1 4; opacity: .5; }
+  .ge.hot { stroke: var(--accent); color: var(--accent); stroke-width: 2; }
+  .ghint {
+    position: absolute; bottom: 8px; right: 12px; color: var(--muted);
+    font-size: 11px; font-family: var(--mono); pointer-events: none; opacity: .75;
+  }
+  #nodedetail { padding: 12px 14px; display: grid; gap: 12px;
+                grid-template-columns: repeat(auto-fit, minmax(190px, 1fr)); }
+  #nodedetail .col b { display: block; font-size: 10px; text-transform: uppercase;
+                       letter-spacing: .07em; color: var(--muted); margin-bottom: 4px; }
+  #nodedetail .col div { font-size: 12.5px; padding: 1px 0; }
+  /* `overflow-wrap` rather than `word-break: break-all`: these columns are
+     narrow, and break-all splits "alice" into "al / ice". Wrap at the boundary
+     when there is one and only break a token that genuinely cannot fit. */
+  #nodedetail .col .mono { font-family: var(--mono); font-size: 12px; overflow-wrap: anywhere; }
+
+  /* interactive bits */
+  button {
+    font: inherit; font-size: 11px; padding: 2px 8px; border-radius: 4px;
+    border: 1px solid var(--line); background: transparent; color: var(--muted);
+    cursor: pointer; flex: none;
+  }
+  button:hover { color: var(--text); border-color: var(--muted); }
+  button.on { color: var(--yellow); border-color: var(--yellow); }
+  select {
+    font: inherit; font-size: 11px; background: var(--panel); color: var(--text);
+    border: 1px solid var(--line); border-radius: 4px; padding: 1px 4px;
+  }
+  li.drag { cursor: grab; }
+  li.drag:active { cursor: grabbing; }
+  li.dragging { opacity: 0.4; }
+  li.over { border-top: 2px solid var(--accent); }
+  li.clickable { cursor: pointer; }
+  li.clickable:hover { background: color-mix(in srgb, var(--accent) 8%, transparent); }
+  .grip { color: var(--muted); cursor: grab; user-select: none; }
+  .spark { display: flex; align-items: flex-end; gap: 2px; height: 34px; flex: 1; }
+  .spark i { flex: 1; background: var(--accent); min-height: 1px; border-radius: 1px; opacity: 0.85; }
+  .kpis { display: grid; grid-template-columns: repeat(auto-fit, minmax(96px, 1fr)); gap: 10px; padding: 12px 14px; }
+  .kpi { display: flex; flex-direction: column; gap: 2px; }
+  .kpi b { font-size: 18px; font-variant-numeric: tabular-nums; }
+  .kpi span { color: var(--muted); font-size: 11px; }
+  .divider {
+    grid-column: 1 / -1; color: var(--muted); font-size: 11px; text-transform: uppercase;
+    letter-spacing: .08em; padding-top: 6px; border-top: 1px solid var(--line);
+  }
+  dialog {
+    border: 1px solid var(--line); border-radius: 8px; background: var(--panel);
+    color: var(--text); padding: 0; max-width: min(560px, 92vw);
+  }
+  dialog::backdrop { background: rgba(0, 0, 0, 0.5); }
+  dialog h3 { margin: 0; padding: 12px 16px; border-bottom: 1px solid var(--line); font-size: 13px; }
+  dialog .body { padding: 14px 16px; font-family: var(--mono); font-size: 12.5px; }
+  dialog .row { display: flex; gap: 12px; padding: 3px 0; }
+  dialog .row b { color: var(--muted); font-weight: 400; min-width: 92px; }
+  dialog footer { padding: 10px 16px; border-top: 1px solid var(--line); text-align: right; }
+  #toast {
+    position: fixed; bottom: 18px; left: 50%; transform: translateX(-50%);
+    background: var(--panel); border: 1px solid var(--line); border-radius: 6px;
+    padding: 8px 14px; font-size: 12.5px; opacity: 0; transition: opacity .2s;
+    pointer-events: none; z-index: 10;
+  }
+  #toast.show { opacity: 1; }
+  #toast.err { border-color: var(--red); color: var(--red); }
+</style>
+</head>
+<body>
+<header>
+  <h1>golab <span>· collaborative workspace</span></h1>
+  <div class="stats" id="stats"></div>
+  <div id="conn" class="down">connecting…</div>
+</header>
+
+<main>
+  <!-- What is happening, who is doing it, and what anyone needs to know. -->
+  <section><h2>Goals</h2><ul id="goals"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Workers</h2><ul id="agents"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Live activity</h2><ul id="activity"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Notifications</h2><ul id="notices"><li class="empty">connecting…</li></ul></section>
+
+  <!-- The repository, as a person pictures it. -->
+  <section class="wide">
+    <h2>Repository
+      <span class="right">
+        <select id="depth" onchange="setDepth(this.value)">
+          <option value="1">services</option>
+          <option value="2">+ directories</option>
+          <option value="3">+ files</option>
+        </select>
+        <button onclick="fitGraph()">fit</button>
+      </span>
+    </h2>
+    <div id="graphwrap">
+      <svg id="graph"></svg>
+      <div class="ghint">drag to pan · scroll to zoom · click a box</div>
+    </div>
+  </section>
+  <section class="wide">
+    <h2>Selected <span class="right" id="selname"></span></h2>
+    <div id="nodedetail"><div class="empty">click a box on the picture</div></div>
+  </section>
+
+  <section class="wide"><h2>Timeline</h2><ul id="events"></ul></section>
+
+  <div class="divider">the machinery underneath</div>
+  <section><h2>Connected tools</h2><ul id="sessions"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Review queue</h2><ul id="review"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Active leases</h2><ul id="leases"><li class="empty">connecting…</li></ul></section>
+  <section><h2>What can execute next</h2><ul id="next"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Critical path</h2><ul id="critpath"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Schedule</h2><ul id="schedule"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Throughput <span id="window"></span></h2><div id="throughput"></div></section>
+  <section><h2>Task graph</h2><ul id="tasks"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Repositories</h2><ul id="repos"><li class="empty">connecting…</li></ul></section>
+  <section><h2>HTTP surface</h2><ul id="routes"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Negotiations</h2><ul id="requests"><li class="empty">connecting…</li></ul></section>
+  <section><h2>Progress</h2><ul id="progress"><li class="empty">connecting…</li></ul></section>
+</main>
+
+<dialog id="detail">
+  <h3 id="detail-title"></h3>
+  <div class="body" id="detail-body"></div>
+  <footer><button onclick="document.getElementById('detail').close()">close</button></footer>
+</dialog>
+<div id="toast"></div>
+
+<script>
+const $ = (id) => document.getElementById(id);
+
+/* ---------------------------------------------------------------- state
+ *
+ * Everything below is filled from a single pushed snapshot. There is no
+ * polling loop: the daemon coalesces one frame per tick and sends it, which is
+ * why a burst of two hundred events no longer means two hundred requests from
+ * every open browser. The only timer left is the lease countdown, and that one
+ * ticks entirely client-side.
+ */
+let leases = [];
+let sessions = [];
+let plan = null;
+let lastStatus = null;
+let arch = null;
+let activity = [];
+let notices = [];
+let agentNames = [];
+
+/* Graph view state, kept across snapshots so the picture does not jump under
+ * somebody's cursor while they are reading it. */
+let archDepth = 1;
+let selected = null;
+let view = { x: 0, y: 0, w: 1000, h: 600 };
+let layoutSig = "";
+let positions = new Map();
+
+const fmtDur = (s) => {
+  if (s < 0) return "expired";
+  if (s < 60) return s + "s";
+  const m = Math.floor(s / 60);
+  return m < 60 ? `${m}m${String(s % 60).padStart(2, "0")}s`
+                : `${Math.floor(m / 60)}h${String(m % 60).padStart(2, "0")}m`;
+};
+const fmtTime = (ms) => new Date(ms).toLocaleTimeString();
+const esc = (s) => String(s ?? "").replace(/[&<>"]/g, (c) =>
+  ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;" }[c]));
+
+function ttlClass(s) { return s <= 10 ? "crit" : s <= 60 ? "warn" : "ok"; }
+
+function toast(msg, isError) {
+  const el = $("toast");
+  el.textContent = msg;
+  el.className = "show" + (isError ? " err" : "");
+  clearTimeout(el._t);
+  el._t = setTimeout(() => { el.className = ""; }, 2600);
+}
+
+/// Every mutation goes through here so failures surface instead of vanishing.
+/// Nothing refetches afterwards: the write lands in the event log, the pump
+/// notices within a tick, and the next snapshot carries the result.
+async function post(url, body) {
+  try {
+    const r = await fetch(url, {
+      method: "POST",
+      headers: { "content-type": "application/json" },
+      body: JSON.stringify(body ?? {}),
+    });
+    if (!r.ok) {
+      const detail = await r.json().catch(() => ({}));
+      toast(detail.error ?? `${r.status} ${r.statusText}`, true);
+      return null;
+    }
+    return r.status === 204 ? {} : await r.json();
+  } catch (e) {
+    toast(String(e), true);
+    return null;
+  }
+}
+
+function pauseAgent(name, paused) {
+  post(`/api/agents/${encodeURIComponent(name)}/pause`, { paused })
+    .then((a) => a && toast(`${name} ${paused ? "paused" : "resumed"}`));
+}
+
+function assignTask(id, to) {
+  if (!to) return;
+  post(`/api/tasks/${encodeURIComponent(id)}/assign`, { to, actor: "dashboard" })
+    .then((t) => t && toast(`${id} → ${to}`));
+}
+
+/// Review actions are explicit human overrides from here — force:true, same
+/// spirit as `assign` bypassing the usual assignee-only guards.
+function approveReview(id) {
+  const agent = prompt("approve as:", "");
+  if (agent === null) return;
+  post(`/api/tasks/${encodeURIComponent(id)}/review/approve`, { agent, force: true })
+    .then((t) => t && toast(`${id} approved`));
+}
+
+function rejectReview(id) {
+  const agent = prompt("reject as:", "");
+  if (agent === null) return;
+  const reason = prompt("reason (optional):", "") || undefined;
+  post(`/api/tasks/${encodeURIComponent(id)}/review/reject`, { agent, reason })
+    .then((t) => t && toast(`${id} sent back`));
+}
+
+async function endSession(id) {
+  try {
+    const r = await fetch(`/api/sessions/${encodeURIComponent(id)}`, { method: "DELETE" });
+    if (!r.ok) {
+      const detail = await r.json().catch(() => ({}));
+      toast(detail.error ?? `${r.status} ${r.statusText}`, true);
+      return;
+    }
+    toast("session closed; its leases were handed back");
+  } catch (e) { toast(String(e), true); }
+}
+
+function showLease(id) {
+  const l = leases.find((x) => x.id === id);
+  if (!l) return;
+  const left = Math.floor((l.expires_at - Date.now()) / 1000);
+  detail(`lease ${l.id}`, {
+    symbol: l.symbol_handle,
+    holder: l.agent,
+    task: l.task ?? "—",
+    priority: l.priority,
+    "time left": fmtDur(left),
+    ttl: fmtDur(l.ttl_secs),
+    acquired: fmtTime(l.acquired_at),
+    "last heartbeat": fmtTime(l.heartbeat_at),
+    note: l.note ?? "—",
+  });
+}
+
+function detail(title, rows) {
+  $("detail-title").textContent = title;
+  $("detail-body").innerHTML = Object.entries(rows)
+    .map(([k, v]) => `<div class="row"><b>${esc(k)}</b><span>${esc(v)}</span></div>`)
+    .join("");
+  $("detail").showModal();
+}
+
+/// Dragging a task onto another one gives it a priority just above it.
+function wireDrag(listId) {
+  const list = $(listId);
+  let dragged = null;
+  list.querySelectorAll("li.drag").forEach((li) => {
+    li.draggable = true;
+    li.addEventListener("dragstart", () => { dragged = li; li.classList.add("dragging"); });
+    li.addEventListener("dragend", () => { li.classList.remove("dragging"); dragged = null; });
+    li.addEventListener("dragover", (e) => { e.preventDefault(); li.classList.add("over"); });
+    li.addEventListener("dragleave", () => li.classList.remove("over"));
+    li.addEventListener("drop", (e) => {
+      e.preventDefault();
+      li.classList.remove("over");
+      if (!dragged || dragged === li) return;
+      const target = Number(li.dataset.priority);
+      const above = dragged.compareDocumentPosition(li) & Node.DOCUMENT_POSITION_PRECEDING;
+      const priority = above ? target + 1 : target - 1;
+      post(`/api/tasks/${encodeURIComponent(dragged.dataset.id)}/priority`, { priority })
+        .then((t) => t && toast(`${dragged?.dataset.id ?? "task"} → priority ${priority}`));
+    });
+  });
+}
+
+/* ======================================================= the repository graph
+ *
+ * Hand-rolled SVG, no library and no build step — the same call the rest of
+ * this file makes. The layout is a small Sugiyama: rank nodes by longest path
+ * over the dependency edges, then order within a rank by the average position
+ * of what points at them, which is enough to keep the arrows from crossing on
+ * a graph of this size.
+ *
+ * Layout is recomputed only when the *set* of nodes and edges changes.
+ * A snapshot that only moves an overlay repaints attributes in place, so the
+ * boxes stay where they were while somebody is reading them.
+ */
+const NODE_W = 132, NODE_H = 46, GAP_X = 26, GAP_Y = 74;
+
+function archSignature(g) {
+  return g.nodes.map((n) => n.id).join(",") + "|" +
+         g.edges.map((e) => e.from + ">" + e.to + e.kind).join(",");
+}
+
+function rankNodes(g) {
+  const known = new Set(g.nodes.map((n) => n.id));
+  const rank = new Map(g.nodes.map((n) => [n.id, 0]));
+  const deps = g.edges.filter((e) => known.has(e.from) && known.has(e.to));
+  // Bounded relaxation rather than a topological sort: a dependency cycle is a
+  // thing this graph is allowed to contain, and it must not hang the browser.
+  for (let pass = 0; pass <= g.nodes.length; pass++) {
+    let changed = false;
+    for (const e of deps) {
+      if (rank.get(e.to) < rank.get(e.from) + 1) {
+        rank.set(e.to, rank.get(e.from) + 1);
+        changed = true;
+      }
+    }
+    for (const n of g.nodes) {
+      // A child sits below its parent, so drilling into a service does not
+      // scatter its directories across the picture.
+      if (n.parent && known.has(n.parent) && rank.get(n.id) <= rank.get(n.parent)) {
+        rank.set(n.id, rank.get(n.parent) + 1);
+        changed = true;
+      }
+    }
+    if (!changed) break;
+  }
+  return rank;
+}
+
+function layoutArch(g) {
+  const rank = rankNodes(g);
+  const rows = new Map();
+  for (const n of g.nodes) {
+    const r = rank.get(n.id) ?? 0;
+    if (!rows.has(r)) rows.set(r, []);
+    rows.get(r).push(n);
+  }
+
+  const pos = new Map();
+  const ordered = [...rows.keys()].sort((a, b) => a - b);
+  let widest = 0;
+  for (const r of ordered) {
+    const row = rows.get(r);
+    // Barycentre: put each box near the average x of whatever points at it.
+    // One pass is enough at this scale and keeps the order stable.
+    row.forEach((n) => {
+      const parents = g.edges.filter((e) => e.to === n.id && pos.has(e.from));
+      n._bary = parents.length
+        ? parents.reduce((a, e) => a + pos.get(e.from).x, 0) / parents.length
+        : Number.POSITIVE_INFINITY;
+    });
+    row.sort((a, b) => (a._bary - b._bary) || a.name.localeCompare(b.name));
+    const width = row.length * NODE_W + (row.length - 1) * GAP_X;
+    widest = Math.max(widest, width);
+    row.forEach((n, i) => {
+      pos.set(n.id, { x: i * (NODE_W + GAP_X) - width / 2, y: r * (NODE_H + GAP_Y) });
+    });
+  }
+  return { pos, width: widest, height: ordered.length * (NODE_H + GAP_Y) };
+}
+
+function edgePath(a, b) {
+  const x1 = a.x + NODE_W / 2, y1 = a.y + NODE_H;
+  const x2 = b.x + NODE_W / 2, y2 = b.y;
+  if (y2 <= y1) {
+    // A back-edge: loop it out to the side so it cannot be mistaken for a
+    // forward dependency.
+    const off = 60;
+    return `M${x1},${y1} C${x1 + off},${y1 + 30} ${x2 + off},${y2 - 30} ${x2},${y2}`;
+  }
+  const mid = (y1 + y2) / 2;
+  return `M${x1},${y1} C${x1},${mid} ${x2},${mid} ${x2},${y2}`;
+}
+
+function renderArch(g) {
+  if (!g) return;
+  arch = g;
+  const svg = $("graph");
+  const sig = archSignature(g);
+  const relayout = sig !== layoutSig;
+
+  if (relayout) {
+    layoutSig = sig;
+    const l = layoutArch(g);
+    positions = l.pos;
+
+    const pad = 60;
+    const parts = [
+      `<defs>
+         <marker id="ar" viewBox="0 0 8 8" refX="7" refY="4" markerWidth="7" markerHeight="7"
+                 orient="auto-start-reverse">
+           <path d="M0,0 L8,4 L0,8 z" fill="currentColor" opacity=".55"/>
+         </marker>
+       </defs>`,
+    ];
+
+    // Containment first, so it sits behind the dependency arrows.
+    for (const n of g.nodes) {
+      if (!n.parent || !positions.has(n.parent) || !positions.has(n.id)) continue;
+      parts.push(`<path class="ge contains" d="${edgePath(positions.get(n.parent), positions.get(n.id))}"/>`);
+    }
+    for (const e of g.edges) {
+      const a = positions.get(e.from), b = positions.get(e.to);
+      if (!a || !b) continue;
+      const back = b.y <= a.y;
+      parts.push(
+        `<path class="ge ${esc(e.kind)}${back ? " back" : ""}" data-from="${esc(e.from)}"
+               data-to="${esc(e.to)}" d="${edgePath(a, b)}" marker-end="url(#ar)"/>`);
+    }
+    for (const n of g.nodes) {
+      const p = positions.get(n.id);
+      if (!p) continue;
+      // Two lines, and nothing shares one. The name gets the full width; the
+      // counts and the worker list split the line below it. An earlier version
+      // put the workers on the title line and they overlapped every name
+      // longer than about ten characters.
+      parts.push(
+        `<g class="gn ${esc(n.kind)}" data-id="${esc(n.id)}" transform="translate(${p.x},${p.y})">
+           <rect width="${NODE_W}" height="${NODE_H}"/>
+           <title></title>
+           <text class="nm" x="10" y="20">${esc(clip(n.name, 17))}</text>
+           <text class="sub" x="10" y="35"></text>
+           <text class="who" x="${NODE_W - 16}" y="35" text-anchor="end"></text>
+           <circle class="live" cx="${NODE_W - 8}" cy="31" r="3.5" fill="none"/>
+         </g>`);
+    }
+    svg.innerHTML = parts.join("");
+    svg.querySelectorAll("g.gn").forEach((el) => {
+      el.addEventListener("click", () => selectNode(el.dataset.id));
+    });
+    fitGraph(l);
+  }
+
+  // Overlays repaint every snapshot; geometry does not.
+  for (const n of g.nodes) {
+    const el = svg.querySelector(`g.gn[data-id="${cssEscape(n.id)}"]`);
+    if (!el) continue;
+    const busy = n.workers.length > 0;
+    el.classList.toggle("busy", busy);
+    el.classList.toggle("sel", n.id === selected);
+    const bits = [];
+    if (n.files) bits.push(n.files + "f");
+    if (n.endpoints) bits.push(n.endpoints + " ep");
+    if (n.review_pending) bits.push(n.review_pending + " rev");
+    el.querySelector(".sub").textContent = bits.join(" · ");
+    el.querySelector(".who").textContent = busy
+      ? (n.workers.length > 2 ? n.workers.length + " here" : clip(n.workers.join(","), 12))
+      : "";
+    // The full truth goes in the tooltip, since the box only has room for a
+    // summary and truncating in silence would be worse than not showing it.
+    el.querySelector("title").textContent =
+      [n.name, bits.join(" · "), busy ? "workers: " + n.workers.join(", ") : ""]
+        .filter(Boolean).join("\n");
+    const live = el.querySelector(".live");
+    // A pulsing dot means somebody's hands are on it *now* — a stronger claim
+    // than holding a lease, and the one the brief is actually about.
+    live.setAttribute("class", n.activity.length ? "live pulse-dot" : "live");
+    live.setAttribute("fill", n.activity.length ? "var(--yellow)" : "none");
+  }
+  highlightEdges();
+
+  // Open on whichever box somebody is actually working in. An empty detail
+  // panel below a picture is a prompt to go hunting; landing on the busiest
+  // node answers "what is going on here" without a click.
+  if (!selected) {
+    const busiest = g.nodes
+      .filter((n) => n.workers.length || n.review_pending)
+      .sort((a, b) => (b.workers.length + b.review_pending) - (a.workers.length + a.review_pending))[0];
+    if (busiest) selectNode(busiest.id);
+  }
+}
+
+/* SVG elements do not take a CSS class animation from a stylesheet rule that
+ * targets `.pulse`, because they are not HTML — so the keyframes are applied
+ * by name here instead. */
+const style = document.createElement("style");
+style.textContent =
+  `.pulse-dot { animation: pulse 1.6s ease-in-out infinite; }
+   @media (prefers-reduced-motion: reduce) { .pulse-dot { animation: none; } }`;
+document.head.appendChild(style);
+
+function clip(s, n) { return s.length > n ? s.slice(0, n - 1) + "…" : s; }
+function cssEscape(s) { return String(s).replace(/["\\]/g, "\\$&"); }
+
+/// The arrows into and out of whatever is selected, so "who would I break" is
+/// visible without reading the panel.
+function highlightEdges() {
+  $("graph").querySelectorAll("path.ge").forEach((p) => {
+    p.classList.toggle(
+      "hot",
+      Boolean(selected) && (p.dataset.from === selected || p.dataset.to === selected));
+  });
+}
+
+/// Frame the whole graph, centred, at no more than 1:1.
+///
+/// One step on purpose. Clamping the zoom and then correcting the aspect ratio
+/// as two passes compounds them — the clamp grows the viewBox, the aspect fix
+/// grows it again along the other axis, and a five-node graph ends up a
+/// postage stamp in the middle of the panel.
+function fitGraph(l) {
+  const svg = $("graph");
+  const cw = svg.clientWidth || 1000;
+  const ch = svg.clientHeight || 600;
+  const pad = 40;
+
+  const box = svg.getBBox && svg.childElementCount ? svg.getBBox() : null;
+  const content = box && box.width > 0
+    ? { x: box.x - pad, y: box.y - pad, w: box.width + pad * 2, h: box.height + pad * 2 }
+    : l
+      ? { x: -l.width / 2 - pad, y: -pad, w: l.width + pad * 2, h: l.height + pad * 2 }
+      : { x: 0, y: 0, w: cw, h: ch };
+
+  // Units per pixel needed to show all of it, never below 1 — "fit" means
+  // "all of it is visible", not "it fills the frame", and magnifying a small
+  // repository until its labels are heading-sized helps nobody.
+  const scale = Math.max(content.w / cw, content.h / ch, 1);
+  const w = cw * scale, h = ch * scale;
+  view = {
+    x: content.x + content.w / 2 - w / 2,
+    y: content.y + content.h / 2 - h / 2,
+    w,
+    h,
+  };
+  applyView();
+}
+
+function applyView() {
+  $("graph").setAttribute("viewBox", `${view.x} ${view.y} ${view.w} ${view.h}`);
+}
+
+function wireGraphGestures() {
+  const svg = $("graph");
+  let dragging = null;
+  svg.addEventListener("pointerdown", (e) => {
+    dragging = { x: e.clientX, y: e.clientY, vx: view.x, vy: view.y };
+    svg.classList.add("panning");
+    svg.setPointerCapture(e.pointerId);
+  });
+  svg.addEventListener("pointermove", (e) => {
+    if (!dragging) return;
+    const scale = view.w / svg.clientWidth;
+    view.x = dragging.vx - (e.clientX - dragging.x) * scale;
+    view.y = dragging.vy - (e.clientY - dragging.y) * scale;
+    applyView();
+  });
+  const stop = () => { dragging = null; svg.classList.remove("panning"); };
+  svg.addEventListener("pointerup", stop);
+  svg.addEventListener("pointercancel", stop);
+  svg.addEventListener("wheel", (e) => {
+    e.preventDefault();
+    // Zoom toward the cursor, so the box under the pointer stays under it.
+    const k = e.deltaY > 0 ? 1.12 : 1 / 1.12;
+    const r = svg.getBoundingClientRect();
+    const fx = (e.clientX - r.left) / r.width, fy = (e.clientY - r.top) / r.height;
+    const nx = view.x + view.w * fx * (1 - k);
+    const ny = view.y + view.h * fy * (1 - k);
+    view = { x: nx, y: ny, w: view.w * k, h: view.h * k };
+    applyView();
+  }, { passive: false });
+}
+
+async function setDepth(d) {
+  archDepth = Number(d);
+  try {
+    const r = await fetch(`/api/arch?depth=${archDepth}`);
+    if (!r.ok) return;
+    // Force a relayout: the node set has changed by definition.
+    layoutSig = "";
+    renderArch(await r.json());
+  } catch (e) { toast(String(e), true); }
+}
+
+async function selectNode(id) {
+  selected = id;
+  const n = arch?.nodes.find((x) => x.id === id);
+  $("selname").textContent = n ? n.name : "";
+  renderArch(arch);
+  try {
+    const r = await fetch(`/api/arch/${encodeURIComponent(id)}?depth=${archDepth}`);
+    if (!r.ok) { $("nodedetail").innerHTML = '<div class="empty">no detail</div>'; return; }
+    renderNodeDetail(await r.json());
+  } catch (e) { toast(String(e), true); }
+}
+
+function renderNodeDetail(d) {
+  const col = (title, items) => items.length
+    ? `<div class="col"><b>${esc(title)}</b>${items.join("")}</div>` : "";
+  const mono = (s) => `<div class="mono">${esc(s)}</div>`;
+  const plain = (s) => `<div>${esc(s)}</div>`;
+
+  const workers = d.held.map((l) => plain(`${l.agent} holds ${l.symbol_handle}`))
+    .concat(d.node.activity.map((a) =>
+      plain(`${a.agent} ${a.kind} ${a.symbol_handle ?? a.path}`)));
+
+  const html = [
+    col("current workers", workers.length ? workers : [plain("nobody")]),
+    col("depends on", d.depends_on.map((r) => plain(r.name))),
+    col("depended on by", d.depended_on_by.map((r) => plain(r.name))),
+    col("tables", d.tables.map((r) => plain(r.name))),
+    col("goals", d.goals.map((g) => plain(`${g.id} ${g.title}`))),
+    col("tasks", d.tasks.map((t) => plain(`${t.id} ${t.title} (${t.state})`))),
+    col("endpoints", d.routes.slice(0, 8).map((r) => mono(r.name))),
+    col("files", [plain(`${d.node.files} file(s), ${d.node.symbols} symbol(s)`)]),
+    col("impact radius", d.impact.slice(0, 6).map((i) => mono(i.symbol.fqn))),
+    col("recent activity", d.recent_events.slice(-6).reverse()
+      .map((e) => mono(`${fmtTime(e.ts)} ${e.kind} ${e.agent ?? ""}`))),
+  ].filter(Boolean).join("");
+
+  $("nodedetail").innerHTML = html || '<div class="empty">nothing indexed here</div>';
+}
+
+/* ================================================================= panels */
+
+function renderLeases() {
+  const now = Date.now();
+  const el = $("leases");
+  if (!leases.length) { el.innerHTML = '<li class="empty">nothing is leased</li>'; return; }
+  el.innerHTML = leases.map((l) => {
+    const left = Math.floor((l.expires_at - now) / 1000);
+    return `<li class="clickable" onclick="showLease('${esc(l.id)}')">
+      <span class="sym">${esc(l.symbol_handle)}</span>
+      <span class="who">${esc(l.agent)}</span>
+      <span class="meta">
+        ${l.task ? esc(l.task) + " · " : ""}p${l.priority} ·
+        <span class="ttl ${ttlClass(left)}">${fmtDur(left)}</span>
+      </span></li>`;
+  }).join("");
+}
+
+/// Who has their hands on which file, right now, before any of it is
+/// committed. Joined against the latest progress report so a percentage and an
+/// ETA ride along when the agent has published one.
+function renderActivity() {
+  const el = $("activity");
+  const live = activity.filter((a) => a.live);
+  if (!live.length) { el.innerHTML = '<li class="empty">nobody is editing anything</li>'; return; }
+  const byAgent = new Map((lastStatus?.progress ?? []).map((p) => [p.agent, p]));
+  const tools = new Map(sessions.filter((s) => s.live).map((s) => [s.agent, s.tool]));
+
+  el.innerHTML = live.map((a) => {
+    const p = byAgent.get(a.agent);
+    const held = Math.floor((Date.now() - a.started_at) / 1000);
+    const bits = [
+      p && p.percent != null ? p.percent + "%" : null,
+      p?.eta_secs ? "~" + fmtDur(p.eta_secs) + " left" : null,
+      "for " + fmtDur(held),
+    ].filter(Boolean).join(" · ");
+    return `<li class="act">
+      <span class="${a.kind === "editing" ? "pulse" : "dot " + (a.kind === "blocked" ? "off" : "on")}"></span>
+      <span class="who">${esc(a.agent)}</span>
+      ${tools.has(a.agent) ? `<span class="badge">${esc(tools.get(a.agent))}</span>` : ""}
+      <span class="verb ${esc(a.kind)}">${esc(a.kind)}</span>
+      <span class="sym">${esc(a.symbol_handle ?? a.path)}</span>
+      <span class="meta">${esc(bits)}</span>
+    </li>`;
+  }).join("");
+}
+
+/// The half of `notify.rs` that never had a reader: everything it works out
+/// about who depends on a change went into agent inboxes and nowhere a person
+/// could see it.
+function renderNotices() {
+  const el = $("notices");
+  if (!notices.length) { el.innerHTML = '<li class="empty">nothing needs you</li>'; return; }
+  el.innerHTML = notices.map((n) => {
+    const clickable = n.node ? ` clickable" onclick="selectNode('${esc(n.node)}')` : "";
+    return `<li class="note ${esc(n.severity)}${clickable}">
+      <span class="head">
+        <span class="badge ${n.severity === "blocking" ? "failed" : n.severity === "warn" ? "ready" : ""}">${esc(n.kind)}</span>
+        <span>${esc(n.title)}</span>
+        <span class="meta">${esc(fmtTime(n.ts))}</span>
+      </span>
+      ${n.detail ? `<span class="why">${esc(n.detail)}</span>` : ""}
+    </li>`;
+  }).join("");
+}
+
+/// Which coding tools are attached right now, and which rows are just history.
+function renderSessions() {
+  const el = $("sessions");
+  if (!sessions.length) { el.innerHTML = '<li class="empty">no coding tools connected</li>'; return; }
+  el.innerHTML = sessions.map((s) => {
+    const when = s.ended_at ? "left " + fmtTime(s.ended_at)
+               : s.live     ? "up " + fmtDur(s.uptime_secs)
+               // Not ended and not heartbeating: a crash the sweep has not
+               // reached yet. Worth showing as its own state.
+               : "silent";
+    const dir = String(s.cwd ?? "").split(/[\\/]/).filter(Boolean).pop() ?? "";
+    return `<li>
+      <span class="dot ${s.live ? "on" : "off"}"></span>
+      <span class="who">${esc(s.agent)}</span>
+      <span class="badge">${esc(s.tool)}</span>
+      <span class="badge">${esc(s.transport)}</span>
+      <span class="meta">${esc(dir)} · ${esc(when)}</span>
+      ${s.live ? `<button title="disconnect this tool and hand its leases back"
+                          onclick="endSession('${esc(s.id)}')">&times;</button>` : ""}
+    </li>`;
+  }).join("");
+}
+
+/// Wave 0, split into what is genuinely startable and what is only waiting on
+/// somebody's lease — the difference between "nobody has picked this up" and
+/// "this cannot be picked up".
+function renderNext() {
+  const el = $("next");
+  const wave = plan?.waves?.[0]?.tasks ?? [];
+  if (!wave.length) { el.innerHTML = '<li class="empty">nothing ready</li>'; return; }
+  el.innerHTML = wave.map((t) => {
+    const held = t.contended_by;
+    const startable = t.ready && !held;
+    return `<li>
+      <span class="badge ${startable ? "ready" : "blocked"}">${startable ? "start" : "held"}</span>
+      <span>${esc(t.title)}</span>
+      <span class="meta">${esc(t.id)}${
+        held ? ` · held by ${esc(held.holder)} · ${fmtDur(held.seconds_until_free)}`
+             : t.ready ? "" : " · waiting on " + esc((t.blocked_by ?? []).join(", "))}</span>
+    </li>`;
+  }).join("");
+}
+
+/// The longest causal chain of not-yet-done work. A cycle means the path can
+/// never complete, which until now only ever surfaced as a count.
+function renderCriticalPath() {
+  const el = $("critpath");
+  const cycles = plan?.cycles ?? [];
+  let html = "";
+  if (cycles.length) {
+    html += cycles.map((c) =>
+      `<li><span class="badge failed">cycle</span><span>${esc(c.join(" → "))}</span>
+       <span class="meta">these can never become ready</span></li>`).join("");
+  }
+  const path = plan?.critical_path ?? [];
+  const byId = new Map((lastStatus?.tasks ?? []).map((t) => [t.id, t]));
+  if (path.length) {
+    html += path.map((id, i) => {
+      const t = byId.get(id);
+      return `<li>
+        <span class="badge ${t ? esc(t.state) : ""}">${i + 1}</span>
+        <span>${esc(t?.title ?? id)}</span>
+        <span class="meta">${esc(id)}</span>
+      </li>`;
+    }).join("");
+  }
+  el.innerHTML = html || '<li class="empty">nothing pending</li>';
+}
+
+function renderGoals(goals) {
+  const el = $("goals");
+  if (!goals.length) { el.innerHTML = '<li class="empty">no goals</li>'; return; }
+  // The rollup arrives already joined. The old panel fetched /api/goals and
+  // then one /api/goals/{id}/progress per goal, rendered twice, and could sit
+  // half-empty while the second wave was in flight.
+  el.innerHTML = goals.map((g) => {
+    const p = g.progress;
+    const pct = p.total ? Math.round(p.percent) : 0;
+    const who = p.contributing_agents.length ? " · " + p.contributing_agents.join(", ") : "";
+    return `<li>
+      <span class="badge ${esc(g.state)}">${esc(g.state)}</span>
+      <span>${esc(g.title)}</span>
+      <span class="meta">
+        ${esc(g.id)}${p.total ? ` · ${p.done}/${p.total} (${pct}%)${esc(who)}` : ""}
+        <span class="bar"><span class="fill" style="width:${pct}%"></span></span>
+      </span>
+    </li>`;
+  }).join("");
+}
+
+async function loadRepos() {
+  try {
+    const r = await fetch("/api/repos");
+    if (!r.ok) return;
+    const repos = await r.json();
+    $("repos").innerHTML = repos.length
+      ? repos.map((r) => `<li>
+          <span class="who">${esc(r.id)}</span>
+          <span>${esc(r.name)}</span>
+          <span class="meta">${esc(r.root_path)}</span>
+        </li>`).join("")
+      : '<li class="empty">no repos registered</li>';
+  } catch (_) { /* repos change when someone runs `repo add`; a reload is fine */ }
+}
+
+/// Throughput is a 30-minute window that moves slowly and is not on the
+/// snapshot, so it stays a fetch — just a rare one, tied to the socket
+/// reconnecting rather than to a timer.
+async function loadThroughput() {
+  try {
+    const r = await fetch("/api/throughput?minutes=30&buckets=30");
+    if (!r.ok) return;
+    const t = await r.json();
+    $("window").textContent = `· last ${t.window_minutes} min`;
+    const peak = Math.max(1, ...t.completed_series);
+    const spark = t.completed_series
+      .map((n) => `<i style="height:${Math.round((n / peak) * 100)}%" title="${n}"></i>`)
+      .join("");
+    const mean = t.mean_task_secs === null ? "—" : fmtDur(Math.round(t.mean_task_secs));
+    $("throughput").innerHTML =
+      `<div class="kpis">
+         <div class="kpi"><b>${t.tasks_completed}</b><span>completed</span></div>
+         <div class="kpi"><b>${mean}</b><span>mean duration</span></div>
+         <div class="kpi"><b>${t.leases_denied}</b><span>denied</span></div>
+         <div class="kpi"><b>${t.handovers}</b><span>handovers</span></div>
+         <div class="kpi"><b>${t.tasks_reassigned}</b><span>reassigned</span></div>
+         <div class="kpi"><b>${t.agents_active}</b><span>agents active</span></div>
+       </div>
+       <div style="padding:0 14px 14px"><div class="spark">${spark}</div></div>`;
+  } catch (_) { /* a reconnect retries */ }
+}
+
+function renderStatus(s) {
+  lastStatus = s;
+  // Attached tools versus rows that merely exist: the number a human watching
+  // a swarm actually wants is "how many real tools are in here".
+  const connected = sessions.filter((x) => x.live).length;
+  const idle = s.agents.filter((a) => a.online && !a.paused && !a.current_task).length;
+  // Work available and nobody taking it is the one combination that is
+  // actionable rather than merely informational.
+  const stalled = idle > 0 && s.schedule.startable_now > 0;
+  const editing = activity.filter((a) => a.live).length;
+
+  $("stats").innerHTML =
+    `<span><b>${s.files}</b> files</span><span><b>${s.symbols}</b> symbols</span>` +
+    `<span><b>${s.leases.length}</b> leased</span>` +
+    `<span><b>${connected}</b> connected</span>` +
+    `<span><b>${editing}</b> editing</span>` +
+    `<span class="${stalled ? "stalled" : ""}"><b>${idle}</b> idle</span>` +
+    `<span><b>${s.knowledge.services}</b> services</span>` +
+    `<span><b>${s.knowledge.endpoints}</b> endpoints</span>` +
+    `<span><b>${s.knowledge.tables}</b> tables</span>` +
+    `<span><b>${s.schedule.startable_now}</b> startable</span>` +
+    `<span><b>${notices.length}</b> notices</span>`;
+
+  const sc = s.schedule;
+  const scheduleRows = [
+    ["can start now", sc.startable_now, sc.startable_now > 0 ? "ready" : ""],
+    ["blocked by a lease", sc.contended, sc.contended > 0 ? "blocked" : ""],
+    ["waves to work through", sc.waves, ""],
+    ["widest wave", sc.max_parallel, ""],
+  ];
+  if (sc.cycles > 0) scheduleRows.push(["dependency cycles", sc.cycles, "failed"]);
+  $("schedule").innerHTML = scheduleRows.map(([label, value, cls]) =>
+    `<li><span class="badge ${cls}">${value}</span><span>${label}</span></li>`).join("");
+
+  $("routes").innerHTML = s.knowledge.routes.length
+    ? s.knowledge.routes.map((r) => {
+        const [method, ...rest] = r.split(" ");
+        return `<li><span class="badge ${method.toLowerCase()}">${esc(method)}</span>` +
+               `<span class="sym">${esc(rest.join(" "))}</span></li>`;
+      }).join("")
+    : '<li class="empty">no HTTP endpoints indexed</li>';
+
+  agentNames = s.agents.map((a) => a.name);
+  const attached = new Set(sessions.filter((x) => x.live).map((x) => x.agent));
+  const latest = new Map((s.progress ?? []).map((p) => [p.agent, p]));
+  const busy = new Map(activity.filter((a) => a.live).map((a) => [a.agent, a]));
+  $("agents").innerHTML = s.agents.length
+    ? s.agents.map((a) => {
+        // Three states, not two. "A tool is attached" and "something is
+        // heartbeating" are different facts, and a human debugging a quiet
+        // swarm needs to tell a live editor from a bare CLI loop.
+        const state = attached.has(a.name) ? "on" : a.online ? "idle" : "off";
+        const title = state === "on" ? "a coding tool is attached"
+                    : state === "idle" ? "heartbeating, but no tool session"
+                    : "not seen recently";
+        const p = latest.get(a.name);
+        const act = busy.get(a.name);
+        const doing = [
+          // What they are actually touching beats what they said they were
+          // doing, so it leads.
+          act ? esc(act.symbol_handle ?? act.path) : null,
+          p?.note ? esc(p.note) : null,
+          p && p.percent != null ? p.percent + "%" : null,
+        ].filter(Boolean).join(" · ");
+        return `<li>
+        <span class="dot ${state}" title="${title}"></span>
+        <span class="who">${esc(a.name)}</span>
+        <span class="badge${a.paused ? " blocked" : ""}">${a.paused ? "paused" : esc(a.kind)}</span>
+        ${a.capability ? `<span class="badge">${esc(a.capability)}</span>` : ""}
+        <span class="meta">${a.leases} lease(s)${a.current_task ? " · " + esc(a.current_task) : ""}${
+          doing ? " · " + doing : ""}</span>
+        <button class="${a.paused ? "on" : ""}"
+                onclick="pauseAgent('${esc(a.name)}', ${!a.paused})">
+          ${a.paused ? "resume" : "pause"}
+        </button>
+      </li>`;
+      }).join("")
+    : '<li class="empty">no agents registered</li>';
+
+  const inReview = s.tasks.filter((t) => t.state === "review");
+  $("review").innerHTML = inReview.length
+    ? inReview.map((t) => `<li>
+        <span class="badge ready">review</span>
+        <span>${esc(t.title)}</span>
+        <span class="meta">${esc(t.id)}${t.assignee ? " · " + esc(t.assignee) : ""}</span>
+        <button onclick="approveReview('${esc(t.id)}')">approve</button>
+        <button onclick="rejectReview('${esc(t.id)}')">reject</button>
+      </li>`).join("")
+    : '<li class="empty">nothing awaiting review</li>';
+
+  leases = s.leases;
+  renderLeases();
+
+  $("requests").innerHTML = s.requests.length
+    ? s.requests.map((r) => {
+        const left = r.deadline_at ? Math.floor((r.deadline_at - Date.now()) / 1000) : null;
+        return `<li>
+          <span class="badge ${r.state}">${esc(r.state)}</span>
+          <span class="who">${esc(r.from)} → ${esc(r.to ?? "all")}</span>
+          <span>${esc(r.subject)}</span>
+          <span class="meta">${esc(r.kind)}${left !== null ? " · " + fmtDur(left) : ""}</span>
+        </li>`;
+      }).join("")
+    : '<li class="empty">no open requests</li>';
+
+  $("progress").innerHTML = s.progress.length
+    ? s.progress.map((p) => {
+        const pct = p.percent ?? null;
+        return `<li>
+          <span class="who">${esc(p.agent)}</span>
+          <span class="bar">${pct === null ? "" :
+            `<span class="fill" style="width:${Math.max(0, Math.min(100, pct))}%"></span>`}</span>
+          <span>${esc(p.note ?? "")}</span>
+          <span class="meta">${pct === null ? "" : pct + "%"}${
+            p.eta_secs ? " · eta " + fmtDur(p.eta_secs) : ""}</span>
+        </li>`;
+      }).join("")
+    : '<li class="empty">nobody has reported in</li>';
+
+  $("tasks").innerHTML = s.tasks.length
+    ? s.tasks.map((t) => {
+        const state = t.state === "pending" && t.ready ? "ready" : t.state;
+        const options = ["", ...agentNames]
+          .map((n) => `<option value="${esc(n)}"${n === t.assignee ? " selected" : ""}>${
+            n === "" ? "unassigned" : esc(n)}</option>`)
+          .join("");
+        return `<li class="drag" draggable="true" data-id="${esc(t.id)}" data-priority="${t.priority}">
+          <span class="grip" title="drag to reprioritise">⠿</span>
+          <span class="badge ${state}">${state}</span>
+          <span>${esc(t.title)}</span>
+          <span class="meta">
+            ${esc(t.id)} · p${t.priority}${
+              t.blocked_by.length ? " · needs " + t.blocked_by.map(esc).join(",") : ""}
+            <select onchange="assignTask('${esc(t.id)}', this.value)"
+                    onclick="event.stopPropagation()">${options}</select>
+          </span>
+        </li>`;
+      }).join("")
+    : '<li class="empty">no tasks</li>';
+  wireDrag("tasks");
+}
+
+function pushEvent(e) {
+  const el = $("events");
+  const li = document.createElement("li");
+  const short = e.kind.split(".").pop();
+  li.innerHTML =
+    `<span class="ts">${fmtTime(e.ts)}</span>` +
+    `<span class="kind ${short}">${esc(e.kind)}</span>` +
+    `<span class="who">${esc(e.agent ?? "-")}</span>` +
+    `<span class="sym">${esc(e.symbol_handle ?? e.task ?? "")}</span>`;
+  el.prepend(li);
+  while (el.childElementCount > 300) el.lastElementChild.remove();
+}
+
+/// One frame in, the whole page out. This is the function that replaced six
+/// polling timers.
+function applySnapshot(s) {
+  sessions = s.sessions ?? [];
+  activity = s.activity ?? [];
+  notices = s.notifications ?? [];
+  plan = s.plan ?? null;
+  renderStatus(s.status);
+  renderSessions();
+  renderActivity();
+  renderNotices();
+  renderGoals(s.goals ?? []);
+  renderNext();
+  renderCriticalPath();
+  // Only when the picture is at the depth the snapshot carries; a viewer who
+  // drilled in keeps what they asked for rather than being yanked back.
+  if (archDepth === 1 && s.arch) renderArch(s.arch);
+}
+
+function connect() {
+  const ws = new WebSocket(`ws://${location.host}/ws`);
+  ws.onopen = () => {
+    $("conn").textContent = "live";
+    $("conn").className = "up";
+    // The two things not on the snapshot, refreshed when the socket comes up
+    // rather than on a timer of their own.
+    loadThroughput();
+    loadRepos();
+  };
+  ws.onclose = () => {
+    $("conn").textContent = "reconnecting…"; $("conn").className = "down";
+    setTimeout(connect, 1500);
+  };
+  ws.onmessage = (m) => {
+    const frame = JSON.parse(m.data);
+    if (frame.type === "snapshot") applySnapshot(frame);
+    else if (frame.type === "event") pushEvent(frame.event);
+  };
+}
+
+wireGraphGestures();
+connect();
+// The only timer left. Countdowns have to tick between snapshots, and they do
+// it entirely client-side — no request, no server involvement.
+setInterval(renderLeases, 1000);
+// Throughput's window slides even when nothing happens, so it gets a slow
+// refresh of its own. Everything else arrives pushed.
+setInterval(loadThroughput, 30000);
+</script>
+</body>
+</html>

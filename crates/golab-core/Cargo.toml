@@ -1,0 +1,32 @@
+[package]
+name = "golab-core"
+version.workspace = true
+edition.workspace = true
+license.workspace = true
+description = "Collaborative agent runtime: symbol graph, leasing, task graph, event log"
+
+[dependencies]
+anyhow.workspace = true
+blake3.workspace = true
+chrono.workspace = true
+ignore.workspace = true
+globset = "0.4"
+regex = "1"
+rusqlite.workspace = true
+serde.workspace = true
+serde_json.workspace = true
+streaming-iterator = "0.1"
+thiserror.workspace = true
+tree-sitter.workspace = true
+
+tree-sitter-rust = "0.24"
+tree-sitter-typescript = "0.23"
+tree-sitter-javascript = "0.25"
+tree-sitter-python = "0.25"
+tree-sitter-go = "0.25"
+tree-sitter-java = "0.23"
+tree-sitter-c-sharp = "0.23"
+tree-sitter-cpp = "0.23"
+
+[dev-dependencies]
+tempfile = "3"
