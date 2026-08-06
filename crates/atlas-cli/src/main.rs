@@ -154,6 +154,18 @@ enum Command {
         #[arg(long)]
         node: Option<String>,
     },
+    /// Everyone in the workspace, human and AI, and what each is doing.
+    ///
+    /// Atlas treats them identically: a person at an editor and a coding
+    /// assistant are both workers, with a goal, a task and a status.
+    Workers {
+        /// Include workers that have gone quiet.
+        #[arg(long)]
+        all: bool,
+        /// Only humans, only assistants, or only automation.
+        #[arg(long = "type", value_name = "KIND")]
+        kind: Option<String>,
+    },
     /// Who is editing what, right now — before any of it is committed.
     ///
     /// Reported by coding tools as they work, through MCP or editor hooks. A
@@ -770,7 +782,35 @@ enum HookCmd {
     SessionEnd,
 }
 
+/// Stack for the thread everything actually runs on.
+///
+/// Windows fixes the main thread's stack at link time, and the default is 1 MB
+/// — where Linux and macOS give 8. `clap`'s derive builds all ~50 subcommands
+/// in one generated function, which in a debug build (no inlining, every
+/// builder temporary live at once) is a single enormous frame. It fits in 8 MB
+/// and does not fit in 1, so `atlas --version` overflowed the stack on Windows
+/// in `cargo build` while working perfectly in `cargo build --release`.
+///
+/// Running on a thread we size ourselves removes the cliff rather than dancing
+/// around it, and means adding the fifty-first command is not a trap.
+const STACK_SIZE: usize = 16 * 1024 * 1024;
+
 fn main() -> ExitCode {
+    match std::thread::Builder::new()
+        .name("atlas".into())
+        .stack_size(STACK_SIZE)
+        .spawn(cli_main)
+    {
+        // A panic on the worker surfaces here as an Err; the panic handler has
+        // already printed it, so there is nothing to add but the exit code.
+        Ok(handle) => handle.join().unwrap_or(ExitCode::from(2)),
+        // If a thread cannot be spawned at all, run inline and hope: a smaller
+        // stack is better than refusing to start.
+        Err(_) => cli_main(),
+    }
+}
+
+fn cli_main() -> ExitCode {
     let cli = Cli::parse();
     let style = if cli.json {
         Style::plain()
@@ -1498,6 +1538,35 @@ fn run(cli: &Cli, st: &Style) -> Result<ExitCode> {
                     } else {
                         print!("{}", render::arch_block(&graph, st));
                     }
+                }
+            }
+        }
+
+        Command::Workers { all, kind } => {
+            // Sweep first, or somebody who left two minutes ago still reads as
+            // present — the same reason `session list` sweeps.
+            store.sweep().ok();
+            let want = kind.as_deref().map(|t| t.to_ascii_lowercase());
+            let workers: Vec<_> = store
+                .workers()?
+                .into_iter()
+                .filter(|w| *all || w.online())
+                .filter(|w| match want.as_deref() {
+                    Some(t) => {
+                        serde_json::to_value(w.worker_type).ok().and_then(|v| {
+                            v.as_str().map(|s| s == t)
+                        }) == Some(true)
+                    }
+                    None => true,
+                })
+                .collect();
+            if cli.json {
+                emit(&serde_json::to_value(&workers)?);
+            } else if workers.is_empty() {
+                println!("{}", st.dim("nobody is here"));
+            } else {
+                for w in &workers {
+                    println!("{}", render::worker_line(w, st));
                 }
             }
         }

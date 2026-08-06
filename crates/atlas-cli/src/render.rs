@@ -10,6 +10,7 @@ use atlas_core::context::{AgentContext, TaskContext};
 use atlas_core::guard::{GuardReport, GuardVerdict};
 use atlas_core::model::*;
 use atlas_core::session::SessionView;
+use atlas_core::worker::{Worker, WorkerStatus, WorkerType};
 use atlas_core::work::{AgentView, StatusSummary, TaskView};
 
 pub struct Style {
@@ -1056,6 +1057,70 @@ pub fn arch_node_block(d: &NodeDetail, st: &Style) -> String {
             .collect(),
     );
     out
+}
+
+pub fn worker_line(w: &Worker, st: &Style) -> String {
+    // Status is the first thing read, so it gets the colour and the marker.
+    let (mark, status) = match w.status {
+        WorkerStatus::Working => (st.green("●"), st.green("working")),
+        WorkerStatus::Blocked => (st.red("●"), st.red("blocked")),
+        WorkerStatus::Reviewing => (st.blue("●"), st.blue("reviewing")),
+        WorkerStatus::Idle => (st.dim("○"), st.dim("idle")),
+        WorkerStatus::Offline => (st.dim("·"), st.dim("offline")),
+    };
+    let kind = match w.worker_type {
+        WorkerType::Human => "human",
+        WorkerType::Ai => "ai",
+        WorkerType::Service => "service",
+    };
+
+    let mut line = format!(
+        "{} {:<16} {:<8} {:<10}",
+        mark,
+        st.bold(&w.name),
+        st.dim(kind),
+        status
+    );
+    // The tool actually attached, not the kind it registered under.
+    if let Some(t) = &w.tool {
+        line.push_str(&format!(" {:<13}", st.dim(t)));
+    } else {
+        line.push_str(&" ".repeat(14));
+    }
+
+    // What they are on, most specific first: the symbol beats the file beats
+    // the task title.
+    let what = w
+        .current_symbol
+        .as_deref()
+        .or(w.current_file.as_deref())
+        .or(w.task_title.as_deref())
+        .unwrap_or("");
+    line.push_str(what);
+
+    let mut meta: Vec<String> = Vec::new();
+    if let Some(t) = &w.task {
+        meta.push(t.clone());
+    }
+    if let Some(g) = &w.goal {
+        meta.push(g.clone());
+    }
+    if let Some(p) = w.percent {
+        meta.push(format!("{p}%"));
+    }
+    if let Some(e) = w.eta_secs {
+        meta.push(format!("~{} left", duration(e)));
+    }
+    if let Some(b) = &w.blocked_by {
+        meta.push(format!("waiting on {b}"));
+    }
+    if w.paused {
+        meta.push("paused".to_string());
+    }
+    if !meta.is_empty() {
+        line.push_str(&st.dim(&format!("  ({})", meta.join(" · "))));
+    }
+    line
 }
 
 pub fn activity_line(a: &ActivityView, st: &Style) -> String {

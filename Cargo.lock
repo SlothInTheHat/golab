@@ -98,6 +98,7 @@ dependencies = [
  "atlas-mcp",
  "chrono",
  "clap",
+ "rusqlite",
  "serde",
  "serde_json",
  "tempfile",

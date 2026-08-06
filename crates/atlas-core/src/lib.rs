@@ -47,6 +47,7 @@ pub mod sql;
 pub mod store;
 pub mod topology;
 pub mod work;
+pub mod worker;
 pub mod workspace;
 
 pub use ids::now_ms;

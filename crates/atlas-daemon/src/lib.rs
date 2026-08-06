@@ -73,6 +73,11 @@ enum WsFrame {
 #[derive(serde::Serialize)]
 struct Snapshot {
     status: atlas_core::work::StatusSummary,
+    /// Everyone in the workspace, human and AI, already joined and ranked.
+    /// The dashboard renders this rather than re-deriving presence from
+    /// `status.agents` + `sessions` + `activity`, which is how three panels
+    /// previously managed to disagree about who was busy.
+    workers: Vec<atlas_core::worker::Worker>,
     sessions: Vec<atlas_core::session::SessionView>,
     activity: Vec<atlas_core::activity::ActivityView>,
     notifications: Vec<atlas_core::notice::Notice>,
@@ -174,6 +179,7 @@ pub async fn serve(root: PathBuf, addr: &str, watch: bool) -> Result<()> {
         .route("/api/arch", get(api_arch))
         .route("/api/arch/{node}", get(api_arch_node))
         .route("/api/activity", get(api_activity))
+        .route("/api/workers", get(api_workers))
         .route("/api/notifications", get(api_notifications))
         .layer(tower_http::cors::CorsLayer::permissive())
         .with_state(state);
@@ -236,6 +242,7 @@ fn build_snapshot(state: &AppState) -> Option<String> {
     let store = state.store.lock().expect("store poisoned");
     let frame = WsFrame::Snapshot(Box::new(Snapshot {
         status: store.status(30).ok()?,
+        workers: store.workers().unwrap_or_default(),
         sessions: store.sessions(false).unwrap_or_default(),
         activity: store.live_activity().unwrap_or_default(),
         notifications: store.notifications(None, 25).unwrap_or_default(),
@@ -1271,6 +1278,25 @@ struct ActivityQuery {
     agent: Option<String>,
     #[serde(default)]
     all: bool,
+}
+
+#[derive(Deserialize)]
+struct WorkerQuery {
+    /// Include workers that have gone quiet.
+    #[serde(default)]
+    all: bool,
+}
+
+async fn api_workers(State(state): State<AppState>, Query(q): Query<WorkerQuery>) -> Response {
+    let mut store = state.store.lock().expect("store poisoned");
+    store.sweep().ok();
+    match store.workers() {
+        Ok(w) => {
+            let w: Vec<_> = w.into_iter().filter(|x| q.all || x.online()).collect();
+            Json(w).into_response()
+        }
+        Err(e) => fail(e),
+    }
 }
 
 async fn api_activity(State(state): State<AppState>, Query(q): Query<ActivityQuery>) -> Response {

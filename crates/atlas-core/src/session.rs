@@ -35,6 +35,9 @@ pub mod transport {
     pub const MCP: &str = "mcp";
     /// A one-shot editor hook callback.
     pub const HOOK: &str = "hook";
+    /// An editor extension. The only transport that proves a *person* is
+    /// here rather than an assistant working on their behalf.
+    pub const IDE: &str = "ide";
     /// A human or a script driving the CLI directly.
     pub const CLI: &str = "cli";
 }
