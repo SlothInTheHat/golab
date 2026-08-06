@@ -4,9 +4,9 @@
 set -u
 
 cd "$(dirname "$0")"
-GOLAB="${GOLAB:-$(cd .. && pwd)/target/debug/golab}"
-[ -x "$GOLAB" ] || GOLAB="$GOLAB.exe"
-if [ ! -x "$GOLAB" ]; then
+ATLAS="${ATLAS:-$(cd .. && pwd)/target/debug/atlas}"
+[ -x "$ATLAS" ] || ATLAS="$ATLAS.exe"
+if [ ! -x "$ATLAS" ]; then
   echo "build it first:  cargo build" >&2
   exit 1
 fi
@@ -17,7 +17,7 @@ cp -r knowledge/. "$WORK/"
 cd "$WORK"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
-run() { printf '\033[2m$ golab %s\033[0m\n' "$*"; "$GOLAB" "$@"; }
+run() { printf '\033[2m$ atlas %s\033[0m\n' "$*"; "$ATLAS" "$@"; }
 
 say "1. index once: symbols, services, routes, tables, ownership"
 run init
@@ -51,7 +51,7 @@ say "8. one lease on a service covers everything in it"
 run --agent cursor-1 lease acquire service:payments-api || true
 
 say "9. the graph stays current on its own"
-"$GOLAB" index --watch > watch.log 2>&1 &
+"$ATLAS" index --watch > watch.log 2>&1 &
 WATCHER=$!
 sleep 1
 printf '\033[2m# adding a route to api/src/routes.ts …\033[0m\n'
@@ -73,7 +73,7 @@ sleep 3
 kill $WATCHER 2>/dev/null
 wait $WATCHER 2>/dev/null
 sed 's/^/   /' watch.log
-echo "   (nobody ran golab scan)"
+echo "   (nobody ran atlas scan)"
 run api
 run tables audit_log
 

@@ -8,9 +8,9 @@
 set -u
 
 cd "$(dirname "$0")"
-GOLAB="${GOLAB:-$(cd .. && pwd)/target/debug/golab}"
-[ -x "$GOLAB" ] || GOLAB="$GOLAB.exe"
-if [ ! -x "$GOLAB" ]; then
+ATLAS="${ATLAS:-$(cd .. && pwd)/target/debug/atlas}"
+[ -x "$ATLAS" ] || ATLAS="$ATLAS.exe"
+if [ ! -x "$ATLAS" ]; then
   echo "build it first:  cargo build" >&2
   exit 1
 fi
@@ -20,7 +20,7 @@ trap 'rm -rf "$WORK"' EXIT
 cp -r src "$WORK/src"
 cd "$WORK"
 
-g() { "$GOLAB" "$@"; }
+g() { "$ATLAS" "$@"; }
 say() { printf '\033[2m%s\033[0m\n' "  $*"; }
 
 g init > /dev/null

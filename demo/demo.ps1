@@ -4,21 +4,21 @@
 $ErrorActionPreference = 'Continue'
 $demoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = Split-Path -Parent $demoDir
-$golab = Join-Path $repo 'target\debug\golab.exe'
-if (-not (Test-Path $golab)) {
+$atlas = Join-Path $repo 'target\debug\atlas.exe'
+if (-not (Test-Path $atlas)) {
     Write-Error "build it first:  cargo build"
     exit 1
 }
 
-$work = Join-Path ([System.IO.Path]::GetTempPath()) ("golab-demo-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$work = Join-Path ([System.IO.Path]::GetTempPath()) ("atlas-demo-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $work | Out-Null
 Copy-Item (Join-Path $demoDir 'src') (Join-Path $work 'src') -Recurse
 Push-Location $work
 
 function Say($text) { Write-Host "`n== $text" -ForegroundColor White }
 function Run() {
-    Write-Host ('$ golab ' + ($args -join ' ')) -ForegroundColor DarkGray
-    & $golab @args
+    Write-Host ('$ atlas ' + ($args -join ' ')) -ForegroundColor DarkGray
+    & $atlas @args
 }
 
 try {
@@ -47,7 +47,7 @@ try {
     Say '6. enforcement: cursor-1 edits a function it does not hold'
     $payments = Join-Path $work 'src\payments.ts'
     # WriteAllText, not Set-Content: an accidental trailing-newline change is a
-    # real file-level edit, and golab would (correctly) report it as one.
+    # real file-level edit, and atlas would (correctly) report it as one.
     $edited = [System.IO.File]::ReadAllText($payments).Replace(
         'const fee = computeFee(amount);',
         'const fee = computeFee(amount) * 2;')
@@ -80,7 +80,7 @@ try {
     Say '12. the whole runtime at a glance'
     Run status --events 8
 
-    Write-Host "`nlive dashboard:  golab serve   (http://127.0.0.1:7373)" -ForegroundColor DarkGray
+    Write-Host "`nlive dashboard:  atlas serve   (http://127.0.0.1:7373)" -ForegroundColor DarkGray
 }
 finally {
     Pop-Location

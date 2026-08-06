@@ -1,10 +1,10 @@
 [workspace]
 resolver = "2"
 members = [
-    "crates/golab-core",
-    "crates/golab-daemon",
-    "crates/golab-mcp",
-    "crates/golab-cli",
+    "crates/atlas-core",
+    "crates/atlas-daemon",
+    "crates/atlas-mcp",
+    "crates/atlas-cli",
 ]
 
 [workspace.package]
@@ -13,9 +13,9 @@ edition = "2021"
 license = "MIT"
 
 [workspace.dependencies]
-golab-core = { path = "crates/golab-core" }
-golab-daemon = { path = "crates/golab-daemon" }
-golab-mcp = { path = "crates/golab-mcp" }
+atlas-core = { path = "crates/atlas-core" }
+atlas-daemon = { path = "crates/atlas-daemon" }
+atlas-mcp = { path = "crates/atlas-mcp" }
 
 anyhow = "1"
 blake3 = "1"

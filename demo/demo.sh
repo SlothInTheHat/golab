@@ -4,9 +4,9 @@
 set -u
 
 cd "$(dirname "$0")"
-GOLAB="${GOLAB:-$(cd .. && pwd)/target/debug/golab}"
-[ -x "$GOLAB" ] || GOLAB="$GOLAB.exe"
-if [ ! -x "$GOLAB" ]; then
+ATLAS="${ATLAS:-$(cd .. && pwd)/target/debug/atlas}"
+[ -x "$ATLAS" ] || ATLAS="$ATLAS.exe"
+if [ ! -x "$ATLAS" ]; then
   echo "build it first:  cargo build" >&2
   exit 1
 fi
@@ -17,7 +17,7 @@ cp -r src "$WORK/src"
 cd "$WORK"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
-run() { printf '\033[2m$ golab %s\033[0m\n' "$*"; "$GOLAB" "$@"; }
+run() { printf '\033[2m$ atlas %s\033[0m\n' "$*"; "$ATLAS" "$@"; }
 
 say "1. index the repository into a symbol graph"
 run init
@@ -71,4 +71,4 @@ run memory list
 say "12. the whole runtime at a glance"
 run status --events 8
 
-printf '\n\033[2mlive dashboard:  golab serve   (http://127.0.0.1:7373)\033[0m\n'
+printf '\n\033[2mlive dashboard:  atlas serve   (http://127.0.0.1:7373)\033[0m\n'

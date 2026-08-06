@@ -1,6 +1,6 @@
 # The live collaborative workspace, end to end.
 #
-# Alice is on Cursor, Bob is on Claude Code. Both attach to the same golab
+# Alice is on Cursor, Bob is on Claude Code. Both attach to the same atlas
 # workspace over MCP. Alice starts editing the payment API; Bob sees it before
 # anything is committed. Alice changes a routed handler; Bob is notified that
 # his work depends on it. Nothing here runs `git`.
@@ -10,14 +10,14 @@
 $ErrorActionPreference = 'Continue'
 $demoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = Split-Path -Parent $demoDir
-$golab = Join-Path $repo 'target\debug\golab.exe'
-if (-not (Test-Path $golab)) {
+$atlas = Join-Path $repo 'target\debug\atlas.exe'
+if (-not (Test-Path $atlas)) {
     Write-Error "build it first:  cargo build"
     exit 1
 }
 
 $port = if ($env:PORT) { $env:PORT } else { '7373' }
-$work = Join-Path ([System.IO.Path]::GetTempPath()) ("golab-ws-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$work = Join-Path ([System.IO.Path]::GetTempPath()) ("atlas-ws-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $work | Out-Null
 Copy-Item (Join-Path $demoDir 'knowledge\*') $work -Recurse
 Push-Location $work
@@ -25,12 +25,12 @@ Push-Location $work
 function Say($text) { Write-Host "`n== $text" -ForegroundColor White }
 function Note($text) { Write-Host "  $text" -ForegroundColor DarkGray }
 
-# One long-lived `golab mcp` per tool -- an open editor is a process whose
+# One long-lived `atlas mcp` per tool -- an open editor is a process whose
 # stdin stays open, and closing it is what quitting looks like.
 $tools = @{}
 function Start-Tool($name, $tool) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $golab
+    $psi.FileName = $atlas
     # A single string rather than ArgumentList: this runs under Windows
     # PowerShell 5.1, whose .NET Framework has no ArgumentList.
     $psi.Arguments = "mcp --as $name --tool $tool"
@@ -71,7 +71,7 @@ function Invoke-Tool($name, $toolName, $argsJson) {
 # Start-Process rather than a pipeline: redirecting a native command's stderr
 # with `2>` inside PowerShell wraps every line in an ErrorRecord, so the
 # refusal comes back decorated with a NativeCommandError that has nothing to do
-# with what golab said.
+# with what atlas said.
 function Invoke-Hook($agent, $event, $relPath, $callback) {
     $full = (Join-Path $work $relPath) -replace '\\', '/'
     $payload = '{"session_id":"s-' + $agent + '","cwd":"' + ($work -replace '\\', '/') +
@@ -82,48 +82,48 @@ function Invoke-Hook($agent, $event, $relPath, $callback) {
     # No BOM: the payload is read as JSON, and 5.1's Set-Content would add one.
     [System.IO.File]::WriteAllText($inFile, $payload, (New-Object System.Text.UTF8Encoding($false)))
 
-    $prev = $env:GOLAB_AGENT
-    $env:GOLAB_AGENT = $agent
-    $p = Start-Process -FilePath $golab -ArgumentList "hook $callback" -WorkingDirectory $work `
+    $prev = $env:ATLAS_AGENT
+    $env:ATLAS_AGENT = $agent
+    $p = Start-Process -FilePath $atlas -ArgumentList "hook $callback" -WorkingDirectory $work `
         -NoNewWindow -Wait -PassThru `
         -RedirectStandardInput $inFile -RedirectStandardOutput $outFile -RedirectStandardError $errFile
-    $env:GOLAB_AGENT = $prev
+    $env:ATLAS_AGENT = $prev
     return @{ code = $p.ExitCode; reason = (Get-Content $errFile -Raw -ErrorAction SilentlyContinue) }
 }
 
 try {
     Say '1. a workspace, indexed'
-    & $golab init | Out-Null
-    & $golab index | Out-Null
-    Note ((& $golab services | Measure-Object -Line).Lines.ToString() + ' services')
+    & $atlas init | Out-Null
+    & $atlas index | Out-Null
+    Note ((& $atlas services | Measure-Object -Line).Lines.ToString() + ' services')
 
     Say '2. a goal, broken into work'
     # The scopes matter: bob's task covers a *test* that calls alice's handler,
     # so when alice changes it the runtime works out that bob is affected
     # without anyone having written that down.
-    & $golab goal add 'Add refunds to the payment API' --priority 9 | Out-Null
-    & $golab goal decompose G1 --task 'refund on the create path' --symbol createPayment --priority 9 | Out-Null
-    & $golab goal decompose G1 --task 'cover it with tests' --symbol testCreatePayment --priority 8 | Out-Null
-    & $golab task add 'ledger entries' --priority 3 --symbol record | Out-Null
-    & $golab goal show G1 | Select-Object -First 6
+    & $atlas goal add 'Add refunds to the payment API' --priority 9 | Out-Null
+    & $atlas goal decompose G1 --task 'refund on the create path' --symbol createPayment --priority 9 | Out-Null
+    & $atlas goal decompose G1 --task 'cover it with tests' --symbol testCreatePayment --priority 8 | Out-Null
+    & $atlas task add 'ledger entries' --priority 3 --symbol record | Out-Null
+    & $atlas goal show G1 | Select-Object -First 6
 
     Say '3. alice opens Cursor, bob opens Claude Code'
     Start-Tool 'alice' 'cursor'
     Start-Tool 'bob' 'claude-code'
     Start-Sleep -Milliseconds 1200
-    & $golab session list
+    & $atlas session list
 
     Say '4. work is handed out -- and its scope is leased in the same breath'
-    & $golab assign T1 --to alice | Out-Null
-    & $golab assign T2 --to bob | Out-Null
-    & $golab swarm list
+    & $atlas assign T1 --to alice | Out-Null
+    & $atlas assign T2 --to bob | Out-Null
+    & $atlas swarm list
 
     Say '5. alice starts editing -- bob can see it before anything is committed'
     Note 'the pre-edit hook fires one keystroke before the change lands'
     Invoke-Hook 'alice' 'PreToolUse' 'api/src/routes.ts' 'guard' | Out-Null
     Invoke-Tool 'alice' 'progress' '{"percent":42,"note":"authorize() done, capture() next","eta_secs":300}'
     Start-Sleep -Milliseconds 800
-    & $golab activity
+    & $atlas activity
 
     Say '6. bob reaches for the same file, and is refused'
     $r = Invoke-Hook 'bob' 'PreToolUse' 'api/src/routes.ts' 'guard'
@@ -141,12 +141,12 @@ try {
         'export function createPayment(req, idempotencyKey) {') |
         Set-Content $routes -Encoding utf8
     Invoke-Hook 'alice' 'PostToolUse' 'api/src/routes.ts' 'post-tool' | Out-Null
-    & $golab scan api/src/routes.ts | Out-Null
+    & $atlas scan api/src/routes.ts | Out-Null
     Start-Sleep -Milliseconds 800
-    & $golab --agent bob request inbox | Select-Object -First 5
+    & $atlas --agent bob request inbox | Select-Object -First 5
 
     Say '8. what a human sees'
-    & $golab arch
+    & $atlas arch
 
     Write-Host ""
     Write-Host "  dashboard:  http://127.0.0.1:$port"
@@ -170,7 +170,7 @@ try {
     Write-Host "  ctrl-c to stop (the workspace is deleted)"
     Write-Host ""
 
-    & $golab serve --port $port
+    & $atlas serve --port $port
 }
 finally {
     foreach ($t in $tools.Values) {

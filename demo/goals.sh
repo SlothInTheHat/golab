@@ -5,9 +5,9 @@
 set -u
 
 cd "$(dirname "$0")"
-GOLAB="${GOLAB:-$(cd .. && pwd)/target/debug/golab}"
-[ -x "$GOLAB" ] || GOLAB="$GOLAB.exe"
-if [ ! -x "$GOLAB" ]; then
+ATLAS="${ATLAS:-$(cd .. && pwd)/target/debug/atlas}"
+[ -x "$ATLAS" ] || ATLAS="$ATLAS.exe"
+if [ ! -x "$ATLAS" ]; then
   echo "build it first:  cargo build" >&2
   exit 1
 fi
@@ -18,10 +18,10 @@ cp -r knowledge/. "$WORK/"
 cd "$WORK"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
-run() { printf '\033[2m$ golab %s\033[0m\n' "$*"; "$GOLAB" "$@"; }
+run() { printf '\033[2m$ atlas %s\033[0m\n' "$*"; "$ATLAS" "$@"; }
 
-"$GOLAB" init > /dev/null
-"$GOLAB" index > /dev/null
+"$ATLAS" init > /dev/null
+"$ATLAS" index > /dev/null
 
 say "1. a human states a goal — not a lease, not a task list"
 run goal add "Support voiding a payment" --priority 9

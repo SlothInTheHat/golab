@@ -14,9 +14,9 @@
 set -u
 
 cd "$(dirname "$0")"
-GOLAB="${GOLAB:-$(cd .. && pwd)/target/debug/golab}"
-[ -x "$GOLAB" ] || GOLAB="$GOLAB.exe"
-if [ ! -x "$GOLAB" ]; then
+ATLAS="${ATLAS:-$(cd .. && pwd)/target/debug/atlas}"
+[ -x "$ATLAS" ] || ATLAS="$ATLAS.exe"
+if [ ! -x "$ATLAS" ]; then
   echo "build it first:  cargo build" >&2
   exit 1
 fi
@@ -35,7 +35,7 @@ trap cleanup EXIT
 cp -r src "$WORK/src"
 cd "$WORK"
 
-g() { "$GOLAB" "$@"; }
+g() { "$ATLAS" "$@"; }
 say() { printf '\033[2m%s\033[0m\n' "  $*"; }
 step() { printf '\n\033[1m== %s\033[0m\n' "$*"; }
 
@@ -46,7 +46,7 @@ g goal decompose G1 --task "rework the fee table" --priority 9 --symbol computeF
 
 # --------------------------------------------------------------- the adapters
 #
-# Each tool gets a `golab mcp` that stays attached for the whole demo, the way
+# Each tool gets a `atlas mcp` that stays attached for the whole demo, the way
 # it would under a real client — that is what lets the runtime heartbeat it and
 # reclaim its work when it goes. Frames are appended to a file that `tail -f`
 # streams into the server's stdin, which keeps stdin open between steps.
@@ -96,7 +96,7 @@ start bob cursor
 sleep 1.2
 
 step "alice opens Claude Code, bob opens Cursor"
-say "neither runs a golab command — the handshake registered them both"
+say "neither runs an Atlas command — the handshake registered them both"
 g session list
 
 step "alice is handed work"
@@ -137,4 +137,4 @@ g session list
 g watch --once --since 0 | grep -E 'session|lease|request' | tail -8
 
 step "the same workspace, live"
-say "golab serve   → connected tools, who holds what, the critical path"
+say "atlas serve   → connected tools, who holds what, the critical path"

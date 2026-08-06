@@ -4,7 +4,7 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 
 ## What this is
 
-`golab` is an operating system for collaborative AI software engineering: a
+`atlas` is an operating system for collaborative AI software engineering: a
 human states a goal, and the runtime coordinates every human and agent
 working toward it. The user-facing vocabulary is `goal`, `swarm`, `continue`,
 `assign`, `observe`, `review` — a human thinks in goals, not leases. Underneath
@@ -21,9 +21,9 @@ started (`goal suggest`); 6-9 are untouched.
 
 ### The adapter layer
 
-golab does not replace coding agents — it coordinates them. Claude Code,
+atlas does not replace coding agents — it coordinates them. Claude Code,
 Cursor, Codex, Windsurf, Zed and Gemini CLI all speak MCP, so **one** stdio
-server (`golab mcp`) reaches all of them and per-tool work collapses to a
+server (`atlas mcp`) reaches all of them and per-tool work collapses to a
 config snippet. Two properties make it an adapter rather than a prompt:
 
 - **Lifecycle never depends on the model.** Registering, heartbeating, renewing
@@ -35,7 +35,7 @@ config snippet. Two properties make it an adapter rather than a prompt:
   `isError: false` and the "no" in `structuredContent`, so a model branches on
   it and goes to negotiate rather than treating it as a fault.
 
-`golab hook install --claude-code --mcp` wires an editor up: `PreToolUse`
+`atlas hook install --claude-code --mcp` wires an editor up: `PreToolUse`
 *blocks* an edit to something another agent holds, `SessionStart`/`SessionEnd`
 join and leave, `PostToolUse` publishes progress. Hooks fire whether the model
 cooperates or not, which is what makes enforcement real rather than advisory.
@@ -55,7 +55,7 @@ a parallel implementation.
 ## Commands
 
 ```bash
-cargo build                       # debug binary at target/debug/golab
+cargo build                       # debug binary at target/debug/atlas
 cargo build --release
 cargo test                        # 364 tests (~40s)
 cargo clippy --all-targets        # kept at zero warnings
@@ -64,9 +64,9 @@ cargo clippy --all-targets        # kept at zero warnings
 Running a subset — the filter is a substring of the full test path:
 
 ```bash
-cargo test -p golab-core lease::tests::expired_leases_free_themselves
-cargo test -p golab-core imports::          # one module's unit tests
-cargo test -p golab-cli --test knowledge    # one integration suite
+cargo test -p atlas-core lease::tests::expired_leases_free_themselves
+cargo test -p atlas-core imports::          # one module's unit tests
+cargo test -p atlas-cli --test knowledge    # one integration suite
 ```
 
 Demos (throwaway temp workspaces; safe to run repeatedly):
@@ -83,34 +83,34 @@ bash demo/workspace.sh     # the live workspace: two tools, a refused edit, a
                            # notification and the repository picture (also .ps1)
 ```
 
-Dogfooding is the fastest smoke test — golab indexes itself:
+Dogfooding is the fastest smoke test — atlas indexes itself:
 
 ```bash
-./target/debug/golab.exe init && ./target/debug/golab.exe index
-./target/debug/golab.exe api        # finds the daemon's own axum routes
-./target/debug/golab.exe services   # finds its own four crates
-rm -rf .golab                       # .golab/ is gitignored; delete when done
+./target/debug/atlas.exe init && ./target/debug/atlas.exe index
+./target/debug/atlas.exe api        # finds the daemon's own axum routes
+./target/debug/atlas.exe services   # finds its own four crates
+rm -rf .atlas                       # .atlas/ is gitignored; delete when done
 ```
 
 ## Architecture
 
-Four crates: `golab-core` (all logic), `golab-daemon` (HTTP/WebSocket/dashboard
-+ filesystem watcher), `golab-mcp` (the MCP adapter, stdio), `golab-cli` (the
-`golab` binary; depends on all three).
+Four crates: `atlas-core` (all logic), `atlas-daemon` (HTTP/WebSocket/dashboard
++ filesystem watcher), `atlas-mcp` (the MCP adapter, stdio), `atlas-cli` (the
+`atlas` binary; depends on all three).
 
 The rule is not "three crates" — it is *core holds all the logic; a transport
 crate wraps it; the CLI is the binary that depends on the transports*.
-`golab-mcp` is a second transport over the same `Store`, with a completely
+`atlas-mcp` is a second transport over the same `Store`, with a completely
 different dependency profile (no axum, no tokio, no tower-http) and a
-synchronous three-thread design, so it is a peer of `golab-daemon` rather than
+synchronous three-thread design, so it is a peer of `atlas-daemon` rather than
 a module inside it.
 
 ### The central invariant: coordination lives in SQLite, not in a server
 
 Every mutation runs inside `Store::write`, which opens an `IMMEDIATE`
 transaction. Two agents in two OS processes cannot both win the same symbol,
-and **nothing has to be running** for `golab lease acquire` to be correct. The
-daemon adds observability, not safety. `crates/golab-cli/tests/cli.rs` proves
+and **nothing has to be running** for `atlas lease acquire` to be correct. The
+daemon adds observability, not safety. `crates/atlas-cli/tests/cli.rs` proves
 this by racing eight real processes and asserting exactly one exits 0 — if you
 change the lease path, that test is the one that matters.
 
@@ -153,7 +153,7 @@ repo-wide unique name → unresolved (never guessed).
 - `body_hash` = the symbol's whole text. `own_hash` = its text with nested
   symbols elided. Enforcement compares `own_hash`, so editing a method does not
   count as editing its class. Changing this breaks `check.rs`.
-- The domain prefix hashed into every symbol id (`golab.symbol.v2\0` today)
+- The domain prefix hashed into every symbol id (`atlas.symbol.v2\0` today)
   should bump whenever the fields being hashed change, even though there are
   no schema migrations to protect — a `repo_id`/schema change already forces
   a fresh database either way. What the bump actually guards against is
@@ -201,7 +201,7 @@ The repository picture is the same rule one level up: the SVG in
 `dashboard.html` lays out and paints what `GET /api/arch` returns, and works
 out nothing about the repository itself. Which files belong to which service,
 which service depends on which, and who is inside each box are all decided in
-`arch.rs`, so `golab arch` in a terminal and the graph in a browser cannot
+`arch.rs`, so `atlas arch` in a terminal and the graph in a browser cannot
 disagree.
 
 **The browser does not poll.** It opens `/ws`, receives one coalesced snapshot
@@ -212,7 +212,7 @@ put the field on the snapshot instead.
 
 ### Events are the only narrative
 
-Everything interesting goes through `store::emit`. `golab watch`, the dashboard
+Everything interesting goes through `store::emit`. `atlas watch`, the dashboard
 and audits all read the same `events` table. The daemon **polls the table**
 rather than broadcasting in-process, because CLI invocations in other processes
 write events too and must show up identically. The MCP adapter's heartbeat
@@ -242,7 +242,7 @@ service in one query. Keep the two consistent — a guard that refused what
 ### Notices ride on tool results, not on notifications
 
 MCP gives a server no way to inject a turn, and clients almost never surface
-`notifications/message` to the model. So `golab-mcp` attaches a `notices` block
+`notifications/message` to the model. So `atlas-mcp` attaches a `notices` block
 to **every** tool result, in both the structured and text halves. That is the
 only channel with a guaranteed path into a model's context; the
 `resources/list_changed` notification is best-effort and nothing may depend on
@@ -263,7 +263,7 @@ it. Don't "fix" this by moving it to server-initiated notifications.
 
 - **The schema has no migrations.** `store.rs` runs `CREATE TABLE IF NOT
   EXISTS`, so adding a column does nothing to an existing database. After a
-  schema change, delete `.golab/runtime.db` (tests use temp dirs, so they pass
+  schema change, delete `.atlas/runtime.db` (tests use temp dirs, so they pass
   regardless — this bites only manual testing).
 - **New tables, never new columns.** The corollary of the above, and the rule
   to reach for first: a new `CREATE TABLE IF NOT EXISTS` self-heals on an
@@ -275,11 +275,11 @@ it. Don't "fix" this by moving it to server-initiated notifications.
   `store::SCHEMA_VERSION`; `Store::open` then **errors** (never warns) on a
   mismatch. A warning would be useless here — the processes most likely to hit
   it, the daemon and an MCP adapter, log to stderr nobody reads.
-- **In `golab mcp`, stdout is a protocol channel.** A stray `println!`
+- **In `atlas mcp`, stdout is a protocol channel.** A stray `println!`
   anywhere reachable from it corrupts a live session in a way that is
-  miserable to diagnose, which is why `golab-mcp` carries
-  `#![deny(clippy::print_stdout, clippy::print_stderr)]` and why `golab-core`
-  contains no printing at all — all of golab's output lives in `golab-cli`.
+  miserable to diagnose, which is why `atlas-mcp` carries
+  `#![deny(clippy::print_stdout, clippy::print_stderr)]` and why `atlas-core`
+  contains no printing at all — all of atlas's output lives in `atlas-cli`.
   The CLI's `Mcp` arm also handles its own errors rather than propagating,
   because `main` reports failures as JSON *on stdout* under `--json`.
 - **Adding a `symbols` column means four edits**: the `SCHEMA` string,
@@ -289,7 +289,7 @@ it. Don't "fix" this by moving it to server-initiated notifications.
   inserting it earlier in the list — inserting shifts every positional index
   after it, silently.
 - **`path` is not a global key — `repo_id` is part of it.** A workspace can
-  register more than one repository (`golab repo add`), and two repos can
+  register more than one repository (`atlas repo add`), and two repos can
   share an identical relative path. Every `path`-keyed read or write in
   `store.rs`/`scan.rs` (file hashing, the full-scan prune diff, edge
   resolution) must filter by `repo_id` too, or scanning one repo can delete
@@ -302,7 +302,7 @@ it. Don't "fix" this by moving it to server-initiated notifications.
   forever), activity is where your hands are *this second* (upserted per
   `(agent, repo, path)`, expired by `sweep`). Reaching for the wrong one gives
   an answer that is stale by a whole task.
-- **Activity is only as good as the tools reporting it.** golab does not watch
+- **Activity is only as good as the tools reporting it.** atlas does not watch
   keystrokes or read unsaved buffers: `hooks::guard` records it before an edit,
   `hooks::post_tool` and the MCP tools after. A tool wired up with neither
   contributes presence but no activity, and that is a documented limit rather
@@ -328,10 +328,10 @@ it. Don't "fix" this by moving it to server-initiated notifications.
 
 ## Testing layout
 
-Unit tests are inline (`#[cfg(test)] mod tests`) in each `golab-core` and
-`golab-mcp` module, and in `golab-daemon/src/watcher.rs`. Integration tests
-drive the **real binary** via `env!("CARGO_BIN_EXE_golab")` in
-`crates/golab-cli/tests/`: `cli.rs` (leasing and enforcement, including the
+Unit tests are inline (`#[cfg(test)] mod tests`) in each `atlas-core` and
+`atlas-mcp` module, and in `atlas-daemon/src/watcher.rs`. Integration tests
+drive the **real binary** via `env!("CARGO_BIN_EXE_atlas")` in
+`crates/atlas-cli/tests/`: `cli.rs` (leasing and enforcement, including the
 multi-process race), `negotiation.rs` (Phase 3), `knowledge.rs` (Phase 4),
 `guard.rs` (the predictive guard and context packets), `hooks.rs` (editor hook
 install and callbacks), `mcp.rs` (a real MCP client speaking to a spawned

@@ -4,9 +4,9 @@
 set -u
 
 cd "$(dirname "$0")"
-GOLAB="${GOLAB:-$(cd .. && pwd)/target/debug/golab}"
-[ -x "$GOLAB" ] || GOLAB="$GOLAB.exe"
-if [ ! -x "$GOLAB" ]; then
+ATLAS="${ATLAS:-$(cd .. && pwd)/target/debug/atlas}"
+[ -x "$ATLAS" ] || ATLAS="$ATLAS.exe"
+if [ ! -x "$ATLAS" ]; then
   echo "build it first:  cargo build" >&2
   exit 1
 fi
@@ -17,20 +17,20 @@ cp -r knowledge/. "$WORK/"
 cd "$WORK"
 
 say() { printf '\n\033[1m== %s\033[0m\n' "$1"; }
-run() { printf '\033[2m$ golab %s\033[0m\n' "$*"; "$GOLAB" "$@"; }
+run() { printf '\033[2m$ atlas %s\033[0m\n' "$*"; "$ATLAS" "$@"; }
 kill_heartbeat() {
   python - "$1" <<'PY'
 import sqlite3, sys
-c = sqlite3.connect('.golab/runtime.db')
+c = sqlite3.connect('.atlas/runtime.db')
 c.execute("UPDATE agents SET heartbeat_at = 0 WHERE name = ?", (sys.argv[1],))
 c.commit()
 PY
 }
 
-"$GOLAB" init > /dev/null
-"$GOLAB" index > /dev/null
+"$ATLAS" init > /dev/null
+"$ATLAS" index > /dev/null
 for a in alice bob carol; do
-  "$GOLAB" --agent "$a" agent register "$a" --kind claude > /dev/null
+  "$ATLAS" --agent "$a" agent register "$a" --kind claude > /dev/null
 done
 
 say "1. a backlog, each task scoped to the symbols it will touch"

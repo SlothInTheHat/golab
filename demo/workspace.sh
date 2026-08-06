@@ -1,7 +1,7 @@
 #!/usr/bin/env bash
 # The live collaborative workspace, end to end.
 #
-# Alice is on Cursor, Bob is on Claude Code. Both attach to the same golab
+# Alice is on Cursor, Bob is on Claude Code. Both attach to the same atlas
 # workspace over MCP. Alice starts editing the payment API; Bob sees it before
 # anything is committed. Alice changes a routed handler; Bob's agent is
 # notified that his work depends on it. Nothing here runs `git`.
@@ -10,9 +10,9 @@
 set -u
 
 cd "$(dirname "$0")"
-GOLAB="${GOLAB:-$(cd .. && pwd)/target/debug/golab}"
-[ -x "$GOLAB" ] || GOLAB="$GOLAB.exe"
-if [ ! -x "$GOLAB" ]; then
+ATLAS="${ATLAS:-$(cd .. && pwd)/target/debug/atlas}"
+[ -x "$ATLAS" ] || ATLAS="$ATLAS.exe"
+if [ ! -x "$ATLAS" ]; then
   echo "build it first:  cargo build" >&2
   exit 1
 fi
@@ -28,11 +28,11 @@ trap cleanup EXIT
 cp -r knowledge/. "$WORK/"
 cd "$WORK"
 
-# The hooks hand golab native absolute paths; on MSYS `pwd` would give a POSIX
+# The hooks hand atlas native absolute paths; on MSYS `pwd` would give a POSIX
 # one that no Windows binary can resolve back to the workspace.
 ROOT="$(pwd -W 2>/dev/null || pwd)"
 
-g() { "$GOLAB" "$@" > /dev/null 2>&1 || true; }
+g() { "$ATLAS" "$@" > /dev/null 2>&1 || true; }
 say() { printf '\n\033[1m%s\033[0m\n' "$1"; }
 note() { printf '  %s\n' "$1"; }
 
@@ -44,10 +44,10 @@ g init
 # that disagree about what a path is: WSL bash driving a Windows .exe hands it
 # `/tmp/...`, which Windows reads as `C:\tmp\...` — a different directory that
 # may not even exist. Everything then "runs" and nothing works.
-if [ ! -f "$WORK/.golab/runtime.db" ]; then
+if [ ! -f "$WORK/.atlas/runtime.db" ]; then
   echo >&2
-  echo "golab init did not create $WORK/.golab/runtime.db" >&2
-  case "$GOLAB" in
+  echo "atlas init did not create $WORK/.atlas/runtime.db" >&2
+  case "$ATLAS" in
     *.exe)
       if grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
         echo >&2
@@ -64,7 +64,7 @@ if [ ! -f "$WORK/.golab/runtime.db" ]; then
   exit 1
 fi
 g index
-note "$("$GOLAB" services | wc -l | tr -d ' ') services, $("$GOLAB" api | wc -l | tr -d ' ') endpoints"
+note "$("$ATLAS" services | wc -l | tr -d ' ') services, $("$ATLAS" api | wc -l | tr -d ' ') endpoints"
 
 say "2. a goal, broken into work"
 # The scopes matter for what follows: bob's task covers a *test* that calls
@@ -74,7 +74,7 @@ g goal add "Add refunds to the payment API" --priority 9
 g goal decompose G1 --task "refund on the create path" --symbol createPayment     --priority 9
 g goal decompose G1 --task "cover it with tests"       --symbol testCreatePayment --priority 8
 g task add "ledger entries" --priority 3 --symbol record
-"$GOLAB" goal show G1 2>/dev/null | head -6
+"$ATLAS" goal show G1 2>/dev/null | head -6
 
 say "3. alice opens Cursor, bob opens Claude Code"
 # Two long-lived MCP servers, driven the way a coding tool drives them. `tail
@@ -83,14 +83,14 @@ say "3. alice opens Cursor, bob opens Claude Code"
 for pair in "alice:cursor" "bob:claude-code"; do
   who="${pair%%:*}"; tool="${pair##*:}"
   : > "$who.mcp"
-  tail -f -n +1 -s 0.1 --pid=$$ "$who.mcp" | "$GOLAB" mcp --as "$who" --tool "$tool" \
+  tail -f -n +1 -s 0.1 --pid=$$ "$who.mcp" | "$ATLAS" mcp --as "$who" --tool "$tool" \
     > "$who.mcp.out" 2>/dev/null &
   TOOLS="$TOOLS $!"
   printf '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"%s","version":"1.0"}}}\n' "$tool" >> "$who.mcp"
   printf '{"jsonrpc":"2.0","method":"notifications/initialized"}\n' >> "$who.mcp"
 done
 sleep 1
-"$GOLAB" session list
+"$ATLAS" session list
 
 say "4. work is handed out — and its scope is leased in the same breath"
 call() {  # call <who> <tool> <json-args>
@@ -102,7 +102,7 @@ call() {  # call <who> <tool> <json-args>
 g assign T1 --to alice
 g assign T2 --to bob
 sleep 1
-"$GOLAB" swarm list
+"$ATLAS" swarm list
 
 say "5. alice starts editing — bob can see it before anything is committed"
 # The pre-edit hook: this fires one keystroke *before* the change lands, which
@@ -110,12 +110,12 @@ say "5. alice starts editing — bob can see it before anything is committed"
 edit() {  # edit <agent> <event> <relative-path>
   printf '{"session_id":"s-%s","cwd":"%s","hook_event_name":"%s","tool_name":"Edit","tool_input":{"file_path":"%s/%s"}}' \
     "$1" "$ROOT" "$2" "$ROOT" "$3" |
-    GOLAB_AGENT="$1" "$GOLAB" hook "$4" > /dev/null 2>&1
+    ATLAS_AGENT="$1" "$ATLAS" hook "$4" > /dev/null 2>&1
 }
 edit alice PreToolUse  api/src/routes.ts guard
 call alice progress '{"percent":42,"note":"authorize() done, capture() next","eta_secs":300}'
 sleep 1
-"$GOLAB" activity
+"$ATLAS" activity
 
 say "6. bob reaches for the same file, and is refused"
 if edit bob PreToolUse api/src/routes.ts guard; then
@@ -123,7 +123,7 @@ if edit bob PreToolUse api/src/routes.ts guard; then
 else
   note "the edit was blocked — see the reason the model was given:"
   printf '{"session_id":"s-bob","cwd":"%s","hook_event_name":"PreToolUse","tool_name":"Edit","tool_input":{"file_path":"%s/api/src/routes.ts"}}' \
-    "$ROOT" "$ROOT" | GOLAB_AGENT=bob "$GOLAB" hook guard 2>&1 >/dev/null | sed 's/^/    /'
+    "$ROOT" "$ROOT" | ATLAS_AGENT=bob "$ATLAS" hook guard 2>&1 >/dev/null | sed 's/^/    /'
 fi
 
 say "7. alice changes the endpoint's signature — bob is told, unprompted"
@@ -136,10 +136,10 @@ sed -i 's/export function createPayment(req) {/export function createPayment(req
 edit alice PostToolUse api/src/routes.ts post-tool
 g scan api/src/routes.ts
 sleep 1
-"$GOLAB" --agent bob request inbox 2>/dev/null | head -5
+"$ATLAS" --agent bob request inbox 2>/dev/null | head -5
 
 say "8. what a human sees"
-"$GOLAB" arch
+"$ATLAS" arch
 
 cat <<EOF
 
@@ -162,8 +162,8 @@ cat <<EOF
     · press × on alice in "Connected tools" — her leases come straight back
     · from another terminal, against the same workspace:
         cd $WORK
-        $GOLAB activity                 # who is in which file, right now
-        $GOLAB arch --depth 2           # the same picture, in a terminal
+        $ATLAS activity                 # who is in which file, right now
+        $ATLAS arch --depth 2           # the same picture, in a terminal
 
   no commits were needed for any of this to be visible.
   ctrl-c to stop (the workspace is deleted)
@@ -172,4 +172,4 @@ EOF
 
 # Not `exec`: that would replace this shell and discard the EXIT trap, leaking
 # the temp workspace every time the server is stopped.
-"$GOLAB" serve --port "$PORT"
+"$ATLAS" serve --port "$PORT"

@@ -5,21 +5,21 @@
 $ErrorActionPreference = 'Continue'
 $demoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = Split-Path -Parent $demoDir
-$golab = Join-Path $repo 'target\debug\golab.exe'
-if (-not (Test-Path $golab)) {
+$atlas = Join-Path $repo 'target\debug\atlas.exe'
+if (-not (Test-Path $atlas)) {
     Write-Error "build it first:  cargo build"
     exit 1
 }
 
-$work = Join-Path ([System.IO.Path]::GetTempPath()) ("golab-goals-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$work = Join-Path ([System.IO.Path]::GetTempPath()) ("atlas-goals-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $work | Out-Null
 Copy-Item (Join-Path $demoDir 'knowledge\*') $work -Recurse
 Push-Location $work
 
 function Say($text) { Write-Host "`n== $text" -ForegroundColor White }
 function Run() {
-    Write-Host ('$ golab ' + ($args -join ' ')) -ForegroundColor DarkGray
-    & $golab @args
+    Write-Host ('$ atlas ' + ($args -join ' ')) -ForegroundColor DarkGray
+    & $atlas @args
 }
 
 try {

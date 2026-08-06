@@ -4,9 +4,9 @@
 set -u
 
 cd "$(dirname "$0")"
-GOLAB="${GOLAB:-$(cd .. && pwd)/target/debug/golab}"
-[ -x "$GOLAB" ] || GOLAB="$GOLAB.exe"
-if [ ! -x "$GOLAB" ]; then
+ATLAS="${ATLAS:-$(cd .. && pwd)/target/debug/atlas}"
+[ -x "$ATLAS" ] || ATLAS="$ATLAS.exe"
+if [ ! -x "$ATLAS" ]; then
   echo "build it first:  cargo build" >&2
   exit 1
 fi
@@ -22,17 +22,17 @@ trap cleanup EXIT
 cp -r knowledge/. "$WORK/"
 cd "$WORK"
 
-g() { "$GOLAB" "$@" > /dev/null 2>&1 || true; }
+g() { "$ATLAS" "$@" > /dev/null 2>&1 || true; }
 
 echo "seeding a workspace in $WORK …"
 g init
 # See demo/workspace.sh for why this one step is checked: a shell and a binary
 # that disagree about what a path is (WSL bash driving a Windows .exe) make
-# every later step fail in a way that looks like a golab bug.
-if [ ! -f "$WORK/.golab/runtime.db" ]; then
-  echo "golab init did not create $WORK/.golab/runtime.db" >&2
+# every later step fail in a way that looks like an Atlas bug.
+if [ ! -f "$WORK/.atlas/runtime.db" ]; then
+  echo "atlas init did not create $WORK/.atlas/runtime.db" >&2
   if grep -qiE 'microsoft|wsl' /proc/version 2>/dev/null; then
-    case "$GOLAB" in
+    case "$ATLAS" in
       *.exe) echo "WSL cannot drive the Windows build — use Git Bash, or build inside WSL." >&2 ;;
     esac
   fi
@@ -65,7 +65,7 @@ g --agent carol request lease getPayment --reason "needs the read path" --deadli
 # Some finished work, so throughput has a duration to average.
 g task add "spike: pagination" --priority 2
 g --agent carol agent resume carol
-CLAIMED=$("$GOLAB" --json --agent carol task next 2>/dev/null |
+CLAIMED=$("$ATLAS" --json --agent carol task next 2>/dev/null |
   python -c "import json,sys; print(json.load(sys.stdin).get('id',''))" 2>/dev/null || true)
 sleep 1
 [ -n "${CLAIMED:-}" ] && g --agent carol task done "$CLAIMED"
@@ -78,7 +78,7 @@ g --agent carol agent pause carol
 for pair in "alice:claude-code" "dana:cursor"; do
   who="${pair%%:*}"; tool="${pair##*:}"
   : > "$who.mcp"
-  tail -f -n +1 -s 0.1 --pid=$$ "$who.mcp" | "$GOLAB" mcp --as "$who" --tool "$tool" \
+  tail -f -n +1 -s 0.1 --pid=$$ "$who.mcp" | "$ATLAS" mcp --as "$who" --tool "$tool" \
     > "$who.mcp.out" 2>/dev/null &
   TOOLS="$TOOLS $!"
   printf '{"jsonrpc":"2.0","id":0,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"%s","version":"1.0"}}}\n' "$tool" >> "$who.mcp"
@@ -93,7 +93,7 @@ ROOT="$(pwd -W 2>/dev/null || pwd)"
 edit() {  # edit <agent> <event> <relative-path> <callback>
   printf '{"session_id":"s-%s","cwd":"%s","hook_event_name":"%s","tool_name":"Edit","tool_input":{"file_path":"%s/%s"}}' \
     "$1" "$ROOT" "$2" "$ROOT" "$3" |
-    GOLAB_AGENT="$1" "$GOLAB" hook "$4" > /dev/null 2>&1
+    ATLAS_AGENT="$1" "$ATLAS" hook "$4" > /dev/null 2>&1
 }
 edit alice PreToolUse  api/src/routes.ts guard
 edit bob   PostToolUse lib/src/ledger.ts post-tool
@@ -115,9 +115,9 @@ cat <<EOF
 
   and from another terminal, against the same workspace:
     cd $WORK
-    $GOLAB --agent bob task done T3 --next
-    $GOLAB --agent eve agent register eve
-    $GOLAB --agent eve task next
+    $ATLAS --agent bob task done T3 --next
+    $ATLAS --agent eve agent register eve
+    $ATLAS --agent eve task next
 
   ctrl-c to stop (the workspace is deleted)
 
@@ -125,4 +125,4 @@ EOF
 
 # Not `exec`: that would replace this shell and discard the EXIT trap, leaking
 # the temp workspace every time the server is stopped.
-"$GOLAB" serve --port "$PORT"
+"$ATLAS" serve --port "$PORT"

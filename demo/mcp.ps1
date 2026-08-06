@@ -12,13 +12,13 @@
 $ErrorActionPreference = 'Continue'
 $demoDir = Split-Path -Parent $MyInvocation.MyCommand.Path
 $repo = Split-Path -Parent $demoDir
-$golab = Join-Path $repo 'target\debug\golab.exe'
-if (-not (Test-Path $golab)) {
+$atlas = Join-Path $repo 'target\debug\atlas.exe'
+if (-not (Test-Path $atlas)) {
     Write-Error "build it first:  cargo build"
     exit 1
 }
 
-$work = Join-Path ([System.IO.Path]::GetTempPath()) ("golab-mcp-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
+$work = Join-Path ([System.IO.Path]::GetTempPath()) ("atlas-mcp-" + [guid]::NewGuid().ToString('N').Substring(0, 8))
 New-Item -ItemType Directory -Path $work | Out-Null
 Copy-Item (Join-Path $demoDir 'src') (Join-Path $work 'src') -Recurse
 Push-Location $work
@@ -26,13 +26,13 @@ Push-Location $work
 function Say($text) { Write-Host "`n== $text" -ForegroundColor White }
 function Note($text) { Write-Host "  $text" -ForegroundColor DarkGray }
 
-# One long-lived `golab mcp` per tool. Its stdin stays open for the whole demo,
+# One long-lived `atlas mcp` per tool. Its stdin stays open for the whole demo,
 # which is what an editor session is; closing it is what quitting looks like,
 # and the server ends its session and hands its leases back.
 $tools = @{}
 function Start-Tool($name, $tool) {
     $psi = New-Object System.Diagnostics.ProcessStartInfo
-    $psi.FileName = $golab
+    $psi.FileName = $atlas
     # A single string rather than ArgumentList: this runs under Windows
     # PowerShell 5.1, whose .NET Framework has no ArgumentList.
     $psi.Arguments = "mcp --as $name --tool $tool"
@@ -90,18 +90,18 @@ function Drain($name) {
 }
 
 try {
-    & $golab init | Out-Null
-    & $golab index | Out-Null
-    & $golab goal add 'Cut the payment fee' --priority 9 | Out-Null
-    & $golab goal decompose G1 --task 'rework the fee table' --priority 9 --symbol computeFee | Out-Null
+    & $atlas init | Out-Null
+    & $atlas index | Out-Null
+    & $atlas goal add 'Cut the payment fee' --priority 9 | Out-Null
+    & $atlas goal decompose G1 --task 'rework the fee table' --priority 9 --symbol computeFee | Out-Null
 
     Start-Tool 'alice' 'claude-code'
     Start-Tool 'bob' 'cursor'
     Start-Sleep -Milliseconds 1200
 
     Say 'alice opens Claude Code, bob opens Cursor'
-    Note 'neither runs a golab command -- the handshake registered them both'
-    & $golab session list
+    Note 'neither runs an Atlas command -- the handshake registered them both'
+    & $atlas session list
 
     Say 'alice is handed work'
     Invoke-Tool 'alice' 'next_task' '{}'
@@ -117,7 +117,7 @@ try {
     Say 'so bob asks for it -- one call, and he never names who to ask'
     Invoke-Tool 'bob' 'ask' '{"kind":"lease-transfer","symbol":"computeFee","reason":"production hotfix"}'
     Drain 'bob'
-    $req = (& $golab --json request list | ConvertFrom-Json)[0].id
+    $req = (& $atlas --json request list | ConvertFrom-Json)[0].id
     Note "-> the runtime knew alice held it and addressed $req to her"
 
     Say 'alice hears about it on her next tool call, without asking'
@@ -128,7 +128,7 @@ try {
     Say 'she accepts; the symbol changes hands in that same transaction'
     Invoke-Tool 'alice' 'respond' ('{"request":"' + $req + '","action":"accept"}')
     Drain 'alice'
-    & $golab lease list
+    & $atlas lease list
 
     Say 'and now bob may edit it'
     Invoke-Tool 'bob' 'check_edit' '{"path":"src/payments.ts"}'
@@ -136,12 +136,12 @@ try {
     Drain 'bob'
 
     Say 'what a human sees'
-    & $golab observe
-    & $golab session list
-    & $golab watch --once --since 0 | Select-String -Pattern 'session|lease|request' | Select-Object -Last 8
+    & $atlas observe
+    & $atlas session list
+    & $atlas watch --once --since 0 | Select-String -Pattern 'session|lease|request' | Select-Object -Last 8
 
     Say 'the same workspace, live'
-    Note 'golab serve   -> connected tools, who holds what, the critical path'
+    Note 'atlas serve   -> connected tools, who holds what, the critical path'
 } finally {
     # Closing stdin is what quitting the editor looks like.
     foreach ($t in $tools.Values) {

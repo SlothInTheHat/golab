@@ -89,6 +89,75 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "d3fb67a6e08acf24fdeccbac2cb6ac4305825bd1f117462e0e6f2f193345ad56"
 
 [[package]]
+name = "atlas-cli"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atlas-core",
+ "atlas-daemon",
+ "atlas-mcp",
+ "chrono",
+ "clap",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+]
+
+[[package]]
+name = "atlas-core"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "blake3",
+ "chrono",
+ "globset",
+ "ignore",
+ "regex",
+ "rusqlite",
+ "serde",
+ "serde_json",
+ "streaming-iterator",
+ "tempfile",
+ "thiserror",
+ "tree-sitter",
+ "tree-sitter-c-sharp",
+ "tree-sitter-cpp",
+ "tree-sitter-go",
+ "tree-sitter-java",
+ "tree-sitter-javascript",
+ "tree-sitter-python",
+ "tree-sitter-rust",
+ "tree-sitter-typescript",
+]
+
+[[package]]
+name = "atlas-daemon"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atlas-core",
+ "axum",
+ "notify",
+ "serde",
+ "serde_json",
+ "tempfile",
+ "tokio",
+ "tower-http",
+]
+
+[[package]]
+name = "atlas-mcp"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "atlas-core",
+ "serde",
+ "serde_json",
+ "tempfile",
+]
+
+[[package]]
 name = "atomic-waker"
 version = "1.1.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -514,75 +583,6 @@ dependencies = [
  "log",
  "regex-automata",
  "regex-syntax",
-]
-
-[[package]]
-name = "golab-cli"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "chrono",
- "clap",
- "golab-core",
- "golab-daemon",
- "golab-mcp",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
-]
-
-[[package]]
-name = "golab-core"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "blake3",
- "chrono",
- "globset",
- "ignore",
- "regex",
- "rusqlite",
- "serde",
- "serde_json",
- "streaming-iterator",
- "tempfile",
- "thiserror",
- "tree-sitter",
- "tree-sitter-c-sharp",
- "tree-sitter-cpp",
- "tree-sitter-go",
- "tree-sitter-java",
- "tree-sitter-javascript",
- "tree-sitter-python",
- "tree-sitter-rust",
- "tree-sitter-typescript",
-]
-
-[[package]]
-name = "golab-daemon"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "axum",
- "golab-core",
- "notify",
- "serde",
- "serde_json",
- "tempfile",
- "tokio",
- "tower-http",
-]
-
-[[package]]
-name = "golab-mcp"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "golab-core",
- "serde",
- "serde_json",
- "tempfile",
 ]
 
 [[package]]
